@@ -22,6 +22,7 @@ import {
   polishFn,
   youtubeCaptionsFn,
   youtubeMetadataFn,
+  launchLocalConverterFn,
 } from "@/lib/transcribe.functions";
 import { splitMediaIntoAudioChunks } from "@/lib/audio-split";
 import { buildTranscriptDocx, downloadBlob } from "@/lib/docx-export";
@@ -196,6 +197,31 @@ function Index() {
 
   async function runFile() {
     if (!file) { toast.error("Selecione um arquivo primeiro."); return; }
+    if (file.size > 200 * 1024 * 1024) {
+      const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+      if (isLocal) {
+        toast.warning("Vídeo muito grande! Risco de erro de memória no navegador.", {
+          duration: 15000,
+          action: {
+            label: "Abrir Conversor Local (Terminal)",
+            onClick: async () => {
+              try {
+                const res = await launchLocalConverterFn();
+                if (res.ok) {
+                  toast.success("PowerShell aberto! Coloque o vídeo na pasta e siga as instruções.");
+                } else {
+                  toast.error(res.reason);
+                }
+              } catch (e) {
+                toast.error("Não foi possível acionar o PowerShell automaticamente.");
+              }
+            }
+          }
+        });
+      } else {
+        toast.warning("Vídeo muito grande! Risco de erro de memória no navegador. Recomendamos extrair o áudio (.mp3) localmente antes do envio.", { duration: 12000 });
+      }
+    }
     const started = performance.now();
     setResult(null);
     setHasPolished(false);
@@ -549,6 +575,51 @@ function Index() {
                     </div>
                   </div>
                 )}
+                
+                <Collapsible className="mt-3 text-left">
+                  <CollapsibleTrigger className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors select-none">
+                    <span>💡 Arquivo muito grande ou lento? Clique aqui para ver como preparar o áudio localmente</span>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-1.5 rounded-lg border border-border/30 bg-secondary/5 p-3 text-[11px] text-muted-foreground space-y-1.5 leading-relaxed">
+                    <p>
+                      Para arquivos ou vídeos muito grandes, você pode extrair apenas o áudio em segundos no seu computador. Isso economiza internet e tempo de processamento.
+                    </p>
+                    <p>
+                      <strong>Com FFmpeg (via Terminal/Prompt):</strong> Abra a pasta do arquivo e execute o comando:
+                    </p>
+                    <pre className="bg-background/80 p-2 rounded border border-border/40 font-mono text-[9px] text-foreground select-all overflow-x-auto">
+                      ffmpeg -i seu-video.mp4 -vn -ac 1 -ar 16000 -b:a 64k audio.mp3
+                    </pre>
+                    <p>
+                      <strong>Outra opção:</strong> Você também pode usar ferramentas online gratuitas como o <a href="https://cobalt.tools" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">cobalt.tools</a> ou Audacity para salvar apenas a faixa de áudio.
+                    </p>
+                    {typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") && (
+                      <div className="pt-2 border-t border-border/20 flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[10px] px-2.5 font-medium border-border hover:bg-secondary/50 text-foreground gap-1"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const res = await launchLocalConverterFn();
+                              if (res.ok) {
+                                toast.success("PowerShell aberto!");
+                              } else {
+                                toast.error(res.reason);
+                              }
+                            } catch (err) {
+                              toast.error("Não foi possível acionar o PowerShell automaticamente.");
+                            }
+                          }}
+                        >
+                          🚀 Abrir Conversor Automático (PowerShell)
+                        </Button>
+                      </div>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
               </TabsContent>
 
               <TabsContent value="youtube" className="m-0 p-5 space-y-4">
