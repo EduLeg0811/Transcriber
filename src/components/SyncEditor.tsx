@@ -403,9 +403,11 @@ export function SyncEditor({
                     <FastForward className="h-4 w-4" />
                   </button>
                 </div>
-                <p className="text-center text-[11px] text-muted-foreground">
-                  Clique numa frase para saltar até ela.
-                </p>
+                {!isReviewer && (
+                  <p className="text-center text-[11px] text-muted-foreground">
+                    Clique numa frase para saltar até ela.
+                  </p>
+                )}
               </div>
             </>
           ) : ytId ? (
