@@ -213,6 +213,7 @@ export function SyncEditor({
   onChange,
   isReviewer = false,
   groupByParagraph = false,
+  fontSize = 15,
 }: {
   file: File | null;
   youtubeUrl?: string | null;
@@ -221,6 +222,7 @@ export function SyncEditor({
   onChange: (next: string) => void;
   isReviewer?: boolean;
   groupByParagraph?: boolean;
+  fontSize?: number;
 }) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -532,7 +534,8 @@ export function SyncEditor({
                   contentEditable
                   suppressContentEditableWarning
                   onBlur={(e) => updateSegment(seg.idx, e.currentTarget.textContent ?? "")}
-                  className="flex-1 cursor-text whitespace-pre-wrap text-[15px] leading-relaxed text-foreground/90 outline-none focus:text-foreground"
+                  style={{ fontSize: `${fontSize}px` }}
+                  className="flex-1 cursor-text whitespace-pre-wrap leading-relaxed text-foreground/90 outline-none focus:text-foreground"
                 >
                   {seg.text}
                 </span>

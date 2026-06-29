@@ -1,36 +1,53 @@
 import { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
-import { Button } from "./ui/button";
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [mounted, setMounted] = useState(false);
+  const [theme, setTheme] = useState("dark");
 
   useEffect(() => {
-    const isDark = document.documentElement.classList.contains("dark");
-    setTheme(isDark ? "dark" : "light");
+    setMounted(true);
+    if (typeof window !== "undefined") {
+      const savedTheme = localStorage.getItem("app-theme") || "dark";
+      setTheme(savedTheme);
+    }
   }, []);
 
-  const toggle = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    if (nextTheme === "dark") {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
+  useEffect(() => {
+    if (!mounted) return;
+    const root = document.documentElement;
+    if (theme === "dark") {
+      root.classList.add("dark");
     } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
+      root.classList.remove("dark");
     }
+    localStorage.setItem("app-theme", theme);
+  }, [theme, mounted]);
+
+  const toggle = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
   };
 
+  if (!mounted) {
+    return (
+      <button
+        className="group h-10 w-10 rounded-full border border-border bg-card/60 flex items-center justify-center text-muted-foreground shadow-sm"
+        aria-hidden="true"
+      />
+    );
+  }
+
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <button
       onClick={toggle}
-      className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground transition-colors"
+      className="group h-10 w-10 rounded-full border border-border bg-card/60 flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors shadow-sm"
       title={theme === "dark" ? "Alternar para modo claro" : "Alternar para modo escuro"}
     >
-      {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-    </Button>
+      {theme === "dark" ? (
+        <Sun className="h-[18px] w-[18px] stroke-[1.5] transition-transform duration-300 group-hover:rotate-45" />
+      ) : (
+        <Moon className="h-[18px] w-[18px] stroke-[1.5] transition-transform duration-300 group-hover:-rotate-12" />
+      )}
+    </button>
   );
 }

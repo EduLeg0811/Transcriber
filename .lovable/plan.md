@@ -11,7 +11,7 @@ Dois modelos que você citou **não existem com esse nome exato** na API da Open
 
   _Whisper-large-v3-turbo open-source só existe via Groq/self-host. Se quiser esse exato, precisa de outra chave (Groq)._
 
-- **"GPT-5.4-mini"** → não existe. Vou usar **`gpt-5-mini`** (modelo mini mais recente da OpenAI) para o polimento. Se preferir `gpt-4o-mini` ou `gpt-4.1-mini`, me diga.
+- **"GPT-5.4-mini"** → não existe. Vou usar **`gpt-5-mini`** (modelo mini mais recente da OpenAI) para o Ajuste.
 
 ## Funcionalidades
 
@@ -21,7 +21,7 @@ Dois modelos que você citou **não existem com esse nome exato** na API da Open
    - Tenta primeiro extrair legendas oficiais (rápido, grátis)
    - Se não houver legenda, baixa o áudio do vídeo no servidor e transcreve via Whisper (mesmo pipeline do upload, com split se necessário)
 4. **Vocabulário customizado** (Conscienciologia): textarea com termos, salvo em `localStorage`, enviado como `prompt` na chamada Whisper para guiar reconhecimento
-5. **Toggle "Polir transcrição"** (desligado por padrão): pós-processa com `gpt-5-mini` para corrigir pontuação, parágrafos e reforçar termos do vocabulário
+5. **Toggle "Polir transcrição"** (desligado por padrão): pós-processa com `gpt-5.4-mini` para corrigir pontuação, parágrafos e reforçar termos do vocabulário
 6. **Resultado**:
    - Copiar para clipboard
    - Baixar `.txt`
@@ -74,6 +74,6 @@ Profissional, moderno, sofisticado:
 2. Instalar deps: `@ffmpeg/ffmpeg @ffmpeg/util docx motion`
 3. Criar server functions + utils client
 4. Construir UI (rota `/` + `/historico`)
-5. Testar fluxos: upload pequeno, upload grande (split), YouTube com legenda, YouTube sem legenda, polimento ligado/desligado, exportar .txt/.docx
+5. Testar fluxos: upload pequeno, upload grande (split), YouTube com legenda, YouTube sem legenda, Ajuste ligado/desligado, exportar .txt/.docx
 
 **Confirma os ajustes nos nomes de modelo (`gpt-4o-mini-transcribe` + `gpt-5-mini`) e eu já começo.**

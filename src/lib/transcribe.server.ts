@@ -141,7 +141,7 @@ Regras:
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`OpenAI polimento falhou (${res.status}): ${errText.slice(0, 300)}`);
+    throw new Error(`OpenAI Ajuste falhou (${res.status}): ${errText.slice(0, 300)}`);
   }
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;

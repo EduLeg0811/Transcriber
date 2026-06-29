@@ -181,20 +181,23 @@ export const youtubeMetadataFn = createServerFn({ method: "POST" })
     };
   });
 
-export const launchLocalConverterFn = createServerFn({ method: "POST" }).handler(async () => {
-  const isProd = process.env.NODE_ENV === "production" || !!process.env.RENDER;
-  if (isProd) {
-    return {
-      ok: false as const,
-      reason:
-        "A execução automática só está disponível localmente (localhost). Em produção, use o script python manualmente no seu computador.",
-    };
-  }
-  try {
-    const { exec } = await import("child_process");
-    exec('start powershell -NoExit -Command "python convert_split.py"');
-    return { ok: true as const };
-  } catch (e) {
-    return { ok: false as const, reason: e instanceof Error ? e.message : String(e) };
-  }
-});
+export const launchLocalConverterFn = createServerFn({ method: "POST" })
+  .validator((data: { fileName?: string }) => data)
+  .handler(async ({ data }) => {
+    const isProd = process.env.NODE_ENV === "production" || !!process.env.RENDER;
+    if (isProd) {
+      return {
+        ok: false as const,
+        reason:
+          "A execução automática só está disponível localmente (localhost). Em produção, use o script python manualmente no seu computador.",
+      };
+    }
+    try {
+      const { exec } = await import("child_process");
+      const arg = data.fileName ? ` '${data.fileName}'` : "";
+      exec(`start powershell -NoExit -Command "python convert_split.py${arg}"`);
+      return { ok: true as const };
+    } catch (e) {
+      return { ok: false as const, reason: e instanceof Error ? e.message : String(e) };
+    }
+  });

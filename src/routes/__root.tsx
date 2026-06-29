@@ -81,7 +81,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "Transcrição precisa de áudio e vídeo em português do Brasil, com vocabulário customizado e polimento por IA.",
+          "Transcrição precisa de áudio e vídeo em português do Brasil, com vocabulário customizado e Ajuste por IA.",
       },
       { name: "theme-color", content: "#0a0a0c" },
       { property: "og:title", content: "Transcreve" },

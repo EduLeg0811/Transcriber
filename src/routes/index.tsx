@@ -59,7 +59,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Transcrição precisa de áudio e vídeo em português do Brasil, com vocabulário customizado e polimento por IA.",
+          "Transcrição precisa de áudio e vídeo em português do Brasil, com vocabulário customizado e Ajuste por IA.",
       },
       { property: "og:title", content: "Transcreve" },
       {
@@ -160,6 +160,7 @@ function Index() {
     initialSegments?: Array<{ start: number; end: number; text: string }>;
   } | null>(null);
   const [viewMode, setViewMode] = useState<"original" | "corrected">("original");
+  const [fontSize, setFontSize] = useState<number>(15);
   const [vocabOpen, setVocabOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
@@ -255,10 +256,10 @@ function Index() {
             label: "Abrir Conversor Local (Terminal)",
             onClick: async () => {
               try {
-                const res = await launchLocalConverterFn();
+                const res = await launchLocalConverterFn({ data: { fileName: file.name } });
                 if (res.ok) {
                   toast.success(
-                    "PowerShell aberto! Coloque o vídeo na pasta e siga as instruções.",
+                    "Ajuste! Coloque o vídeo na pasta e siga as instruções.",
                   );
                 } else {
                   toast.error(res.reason);
@@ -557,10 +558,10 @@ function Index() {
       setResult((r) => (r ? { ...r, text } : r));
       setHasPolished(true);
       setViewMode("corrected");
-      toast.success("Polimento concluído!", { id: toastId });
+      toast.success("Ajuste concluído!", { id: toastId });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`Falha no polimento: ${msg}`, { id: toastId });
+      toast.error(`Falha no Ajuste: ${msg}`, { id: toastId });
     } finally {
       setIsPolishingResult(false);
     }
@@ -596,49 +597,49 @@ function Index() {
       <Toaster theme="dark" position="top-center" richColors />
 
       {/* Nav */}
-      <header className="mx-auto flex max-w-[65%] w-full items-center justify-between px-6 py-6 md:px-12">
-        <Link to="/" className="group flex items-center gap-2">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30">
-            <Mic className="h-4 w-4" />
-          </div>
-          <span className="font-serif text-xl tracking-tight">Escriba IA</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <ThemeToggle />
-          <Link
-            to="/historico"
-            className="inline-flex items-center gap-2 rounded-full border border-border bg-card/40 px-3.5 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <History className="h-4 w-4" /> Histórico
+      <header className="sticky top-0 z-30 bg-background/70 border-b border-border/50 backdrop-blur-xl py-4 mb-6">
+        <div className="mx-auto flex max-w-[65%] w-full items-center justify-between px-6 md:px-12">
+          <Link to="/" className="group flex items-center gap-2">
+            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30 transition-all duration-300 group-hover:scale-110 group-hover:filter group-hover:drop-shadow-[0_0_8px_rgba(34,197,94,0.4)]">
+              <Mic className="h-4 w-4" />
+            </div>
+            <span className="font-display text-2xl tracking-tight text-foreground">
+              Escriba <span className="text-primary font-bold">IA</span>
+            </span>
+            <span className="hidden sm:inline text-[9px] uppercase tracking-[0.22em] text-muted-foreground ml-1.5 self-end mb-1">
+              Transcrição
+            </span>
           </Link>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Link
+              to="/historico"
+              className="group h-10 w-10 rounded-full border border-border/60 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors shadow-sm"
+              title="Histórico de Transcrições"
+            >
+              <History className="h-[18px] w-[18px] stroke-[1.5]" />
+            </Link>
+          </div>
         </div>
       </header>
 
       {/* Hero */}
-      <main className="mx-auto w-full max-w-[65%] px-6 pb-4 pt-0 md:px-12">
+      <main className="mx-auto w-full max-w-[65%] px-6 pb-4 pt-4 md:px-12">
         <div className="mx-auto w-full max-w-none">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
-            className="text-center"
+            className="text-center mb-12"
           >
-            <h1 className="font-serif text-5xl leading-[1.05] sm:text-58xl md:text-5xl">
-              <span className="italic text-primary text-8xl">Fala,</span>
-
+            <h1 className="font-display text-5xl leading-[1.05] text-foreground sm:text-6xl">
+              Fala,
               <br />
-              <span className="font-serif text-xl tracking-tight text-xl md:text-6xl">
-                que eu transcrevo.
-              </span>
+              <span className="italic text-primary/80">que eu transcrevo.</span>
             </h1>
-            {/* <p className="mx-auto mt-5 max-w-xl text-pretty text-muted-foreground">
-              Transcrição precisa para conferências, palestras e estudos da Conscienciologia — com jargões reconhecidos automaticamente.
-            </p> */}
-            {/* 
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card/40 px-3 py-1 text-xs text-muted-foreground">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              Escriba AI · Neologismos da Conscienciologia
-            </div> */}
+            <p className="mx-auto mt-5 max-w-2xl text-xs sm:text-sm md:text-base leading-relaxed text-muted-foreground font-sans">
+              Transcrição de Áudio • Legendas do YouTube • Revisão • Ajuste IA
+            </p>
           </motion.div>
 
           {/* Card */}
@@ -679,8 +680,8 @@ function Index() {
                       }
                     }}
                     className={`rounded-full px-3 py-1 text-xs font-medium transition-all border ${!isReviewer
-                        ? "bg-primary/10 text-primary border-primary/25 shadow-sm"
-                        : "text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40"
+                      ? "bg-primary/10 text-primary border-primary/25 shadow-sm"
+                      : "text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40"
                       }`}
                   >
                     Transcrever
@@ -694,8 +695,8 @@ function Index() {
                       }
                     }}
                     className={`rounded-full px-3 py-1 text-xs font-medium transition-all border ${isReviewer
-                        ? "bg-primary/10 text-primary border-primary/25 shadow-sm"
-                        : "text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40"
+                      ? "bg-primary/10 text-primary border-primary/25 shadow-sm"
+                      : "text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40"
                       }`}
                   >
                     Revisar
@@ -915,7 +916,7 @@ function Index() {
                     </span>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="mt-1.5 rounded-lg border border-border/30 bg-secondary/5 p-3 text-[11px] text-muted-foreground space-y-1.5 leading-relaxed">
-                    <p>
+                    {/* <p>
                       Para arquivos ou vídeos muito grandes, você pode extrair apenas o áudio em
                       segundos no seu computador. Isso economiza internet e tempo de processamento.
                     </p>
@@ -938,7 +939,7 @@ function Index() {
                         cobalt.tools
                       </a>{" "}
                       ou Audacity para salvar apenas a faixa de áudio.
-                    </p>
+                    </p> */}
                     {typeof window !== "undefined" &&
                       (window.location.hostname === "localhost" ||
                         window.location.hostname === "127.0.0.1") && (
@@ -951,9 +952,9 @@ function Index() {
                             onClick={async (e) => {
                               e.stopPropagation();
                               try {
-                                const res = await launchLocalConverterFn();
+                                const res = await launchLocalConverterFn({ data: { fileName: file?.name } });
                                 if (res.ok) {
-                                  toast.success("PowerShell aberto!");
+                                  toast.success("Ajuste!");
                                 } else {
                                   toast.error(res.reason);
                                 }
@@ -1141,12 +1142,26 @@ function Index() {
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Controle de Tamanho de Fonte */}
+                  <div className="flex items-center gap-2 mr-1 text-muted-foreground select-none bg-background/20 border border-border px-3 py-1 rounded-full h-8">
+                    <span className="text-[10px] uppercase tracking-wider font-sans">Fonte</span>
+                    <input
+                      type="range"
+                      min="12"
+                      max="24"
+                      value={fontSize}
+                      onChange={(e) => setFontSize(Number(e.target.value))}
+                      className="w-16 h-1 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                    />
+                    <span className="text-[10px] font-mono tabular-nums">{fontSize}px</span>
+                  </div>
+
                   <div className="flex items-center gap-1 bg-background/30 border border-border rounded-full p-0.5 mr-1">
                     <button
                       onClick={() => setViewMode("original")}
                       className={`rounded-full px-3.5 py-1 text-xs font-medium transition-all ${viewMode === "original"
-                          ? "bg-primary text-primary-foreground shadow-sm scale-102"
-                          : "text-muted-foreground hover:text-foreground"
+                        ? "bg-primary text-primary-foreground shadow-sm scale-102"
+                        : "text-muted-foreground hover:text-foreground"
                         }`}
                     >
                       Original
@@ -1154,8 +1169,8 @@ function Index() {
                     <button
                       onClick={() => setViewMode("corrected")}
                       className={`rounded-full px-3.5 py-1 text-xs font-medium transition-all ${viewMode === "corrected"
-                          ? "bg-primary text-primary-foreground shadow-sm scale-102"
-                          : "text-muted-foreground hover:text-foreground"
+                        ? "bg-primary text-primary-foreground shadow-sm scale-102"
+                        : "text-muted-foreground hover:text-foreground"
                         }`}
                     >
                       Corrigido
@@ -1200,8 +1215,8 @@ function Index() {
                       onClick={runPostPolish}
                       disabled={isPolishingResult || isMergingParagraphs || !result.text}
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${hasPolished
-                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
-                          : "bg-primary/10 text-primary hover:bg-primary/20"
+                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
+                        : "bg-primary/10 text-primary hover:bg-primary/20"
                         }`}
                     >
                       {isPolishingResult ? (
@@ -1215,8 +1230,8 @@ function Index() {
                       onClick={runMergeParagraphs}
                       disabled={isPolishingResult || isMergingParagraphs || !result.text}
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${hasMergedParagraphs
-                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
-                          : "bg-primary/10 text-primary hover:bg-primary/20"
+                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
+                        : "bg-primary/10 text-primary hover:bg-primary/20"
                         }`}
                     >
                       {isMergingParagraphs ? (
@@ -1284,7 +1299,7 @@ function Index() {
                       className="resize-none border-border bg-background/40 text-xs"
                     />
                     <p className="mt-2 text-[10px] text-muted-foreground">
-                      Termos enviados como dica ao modelo de polimento (até ~900 caracteres). Salvo
+                      Termos enviados como dica ao modelo de Ajuste (até ~900 caracteres). Salvo
                       localmente neste dispositivo.
                     </p>
                   </CollapsibleContent>
@@ -1307,6 +1322,7 @@ function Index() {
                   }
                   isReviewer={isReviewer}
                   groupByParagraph={viewMode === "original" ? false : hasMergedParagraphs}
+                  fontSize={fontSize}
                 />
               </div>
             </motion.section>
