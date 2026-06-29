@@ -43,7 +43,6 @@ import {
   mergeParagraphsFn,
   youtubeCaptionsFn,
   youtubeMetadataFn,
-  launchLocalConverterFn,
   downloadYoutubeAudioFn,
 } from "@/lib/transcribe.functions";
 import { splitMediaIntoAudioChunks } from "@/lib/audio-split";
@@ -91,6 +90,9 @@ const POLISH_MODELS = [
   { value: "gpt-5.4-nano", label: "gpt-5.4-nano" },
 ] as const;
 
+// ffmpeg.wasm keeps multiple copies of the input in browser memory. Above this
+// size, native FFmpeg is substantially more reliable on typical computers.
+const LOCAL_CONVERTER_THRESHOLD_BYTES = 200 * 1024 * 1024;
 
 const REASONING_EFFORT_OPTIONS = [
   { value: "default", label: "default" },
@@ -161,6 +163,7 @@ function Index() {
   } | null>(null);
   const [viewMode, setViewMode] = useState<"original" | "corrected">("original");
   const [fontSize, setFontSize] = useState<number>(15);
+  const [paragraphGap, setParagraphGap] = useState<number>(12);
   const [vocabOpen, setVocabOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
@@ -240,42 +243,34 @@ function Index() {
     if (f) setFile(f);
   }, []);
 
+  async function runLocalConverter() {
+    if (!file) return;
+
+    const toastId = toast.loading("Preparando arquivo para o conversor local…");
+    try {
+      const response = await fetch("/api/local-converter", {
+        method: "POST",
+        headers: {
+          "content-type": file.type || "application/octet-stream",
+          "x-file-name": encodeURIComponent(file.name),
+        },
+        body: file,
+      });
+      const res = (await response.json()) as { ok: boolean; reason?: string; outputDir?: string };
+      if (res.ok) {
+        toast.success(`Conversor iniciado para “${file.name}”.`, { id: toastId });
+      } else {
+        toast.error(res.reason || "Não foi possível iniciar o conversor.", { id: toastId });
+      }
+    } catch {
+      toast.error("Não foi possível acionar o PowerShell automaticamente.", { id: toastId });
+    }
+  }
+
   async function runFile() {
     if (!file) {
       toast.error("Selecione um arquivo primeiro.");
       return;
-    }
-    if (file.size > 200 * 1024 * 1024) {
-      const isLocal =
-        typeof window !== "undefined" &&
-        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-      if (isLocal) {
-        toast.warning("Vídeo muito grande!", {
-          duration: 15000,
-          action: {
-            label: "Abrir Conversor Local (Terminal)",
-            onClick: async () => {
-              try {
-                const res = await launchLocalConverterFn({ data: { fileName: file.name } });
-                if (res.ok) {
-                  toast.success(
-                    "Ajuste! Coloque o vídeo na pasta e siga as instruções.",
-                  );
-                } else {
-                  toast.error(res.reason);
-                }
-              } catch (e) {
-                toast.error("Não foi possível acionar o PowerShell automaticamente.");
-              }
-            },
-          },
-        });
-      } else {
-        toast.warning(
-          "Vídeo muito grande! Recomendamos extrair o áudio (.mp3) localmente antes do envio.",
-          { duration: 5000 },
-        );
-      }
     }
     const started = performance.now();
     setResult(null);
@@ -453,7 +448,7 @@ function Index() {
 
       const fileRes = await fetch(res.path);
       const blob = await fileRes.blob();
-      const ext = res.path.split('.').pop() || 'mp3';
+      const ext = res.path.split(".").pop() || "mp3";
       const filename = ytMetadata?.title
         ? `${ytMetadata.title.slice(0, 50).replace(/[\\/:*?"<>|]/g, "")}.${ext}`
         : `${res.id}.${ext}`;
@@ -599,17 +594,29 @@ function Index() {
       {/* Nav */}
       <header className="sticky top-0 z-30 bg-background/70 border-b border-border/50 backdrop-blur-xl py-4 mb-6">
         <div className="mx-auto flex max-w-[65%] w-full items-center justify-between px-6 md:px-12">
-          <Link to="/" className="group flex items-center gap-2">
-            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30 transition-all duration-300 group-hover:scale-110 group-hover:filter group-hover:drop-shadow-[0_0_8px_rgba(34,197,94,0.4)]">
-              <Mic className="h-4 w-4" />
-            </div>
-            <span className="font-display text-2xl tracking-tight text-foreground">
-              Escriba <span className="text-primary font-bold">IA</span>
-            </span>
-            <span className="hidden sm:inline text-[9px] uppercase tracking-[0.22em] text-muted-foreground ml-1.5 self-end mb-1">
-              Transcrição
-            </span>
-          </Link>
+          <div className="flex items-center gap-2">
+            <a
+              href="https://www.cons-ia.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group"
+              title="Acessar Cons-IA"
+            >
+              <img
+                src="/favicon.svg"
+                alt="Cons-IA"
+                className="h-12 w-12 rounded-lg transition-all duration-300 group-hover:scale-110 group-hover:drop-shadow-[0_0_8px_rgba(34,197,94,0.4)]"
+              />
+            </a>
+            <Link to="/" className="flex items-center gap-2">
+              <span className="font-display text-2xl tracking-tight text-foreground">
+                Escriba <span className="text-primary font-bold">IA</span>
+              </span>
+              <span className="hidden sm:inline text-[9px] uppercase tracking-[0.22em] text-muted-foreground ml-1.5 self-end mb-1">
+                Transcrição
+              </span>
+            </Link>
+          </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <Link
@@ -853,17 +860,22 @@ function Index() {
                       }}
                       onDragLeave={() => setDragOver(false)}
                       onDrop={onDrop}
-                      className={`flex-1 flex items-center justify-center gap-3 h-12 w-full cursor-pointer rounded-xl border border-dashed px-4 text-center transition-all ${dragOver ? "border-primary/60 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-secondary/30"}`}
+                      className={`flex-1 flex items-center justify-center gap-3 min-h-14 w-full cursor-pointer rounded-xl border border-dashed px-4 py-2 text-center transition-all ${dragOver ? "border-primary/60 bg-primary/5" : "border-gray-300/60 bg-gray-100/80 hover:border-zinc-400/70 hover:bg-gray-200/80 dark:border-zinc-700/35 dark:bg-sky-950/20 dark:hover:border-sky-600/50 dark:hover:bg-sky-900/25"}`}
                     >
                       <input
                         type="file"
-                        accept="audio/*,video/*,.mp3,.mp4,.m4a,.wav,.webm,.mov"
+                        accept=".mp3,.mp4,.m4a,.wav,.webm,.mov,.mkv,.aac,.ogg,.flac"
                         className="hidden"
                         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                       />
                       <Upload className="h-4 w-4 text-primary shrink-0" />
-                      <span className="text-xs font-medium truncate text-muted-foreground">
-                        Arraste ou clique para selecionar áudio/vídeo
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-muted-foreground">
+                          Arraste ou clique para selecionar áudio/vídeo
+                        </span>
+                        <span className="mt-0.5 block text-[9px] text-muted-foreground/70">
+                          MP3, MP4, M4A, WAV, WEBM, MOV, MKV, AAC, OGG e FLAC
+                        </span>
                       </span>
                     </label>
 
@@ -908,69 +920,22 @@ function Index() {
                   </div>
                 )}
 
-                <Collapsible className="mt-3 text-left">
-                  <CollapsibleTrigger className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors select-none">
-                    <span>
-                      💡 Arquivo muito grande ou lento? Clique aqui para ver como preparar o áudio
-                      localmente
-                    </span>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-1.5 rounded-lg border border-border/30 bg-secondary/5 p-3 text-[11px] text-muted-foreground space-y-1.5 leading-relaxed">
-                    {/* <p>
-                      Para arquivos ou vídeos muito grandes, você pode extrair apenas o áudio em
-                      segundos no seu computador. Isso economiza internet e tempo de processamento.
-                    </p>
-                    <p>
-                      <strong>Com FFmpeg (via Terminal/Prompt):</strong> Abra a pasta do arquivo e
-                      execute o comando:
-                    </p>
-                    <pre className="bg-background/80 p-2 rounded border border-border/40 font-mono text-[9px] text-foreground select-all overflow-x-auto">
-                      ffmpeg -i seu-video.mp4 -vn -ac 1 -ar 16000 -b:a 64k audio.mp3
-                    </pre>
-                    <p>
-                      <strong>Outra opção:</strong> Você também pode usar ferramentas online
-                      gratuitas como o{" "}
-                      <a
-                        href="https://cobalt.tools"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline font-medium"
-                      >
-                        cobalt.tools
-                      </a>{" "}
-                      ou Audacity para salvar apenas a faixa de áudio.
-                    </p> */}
-                    {typeof window !== "undefined" &&
-                      (window.location.hostname === "localhost" ||
-                        window.location.hostname === "127.0.0.1") && (
-                        <div className="pt-2 border-t border-border/20 flex items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[10px] px-2.5 font-medium border-border hover:bg-secondary/50 text-foreground gap-1"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              try {
-                                const res = await launchLocalConverterFn({ data: { fileName: file?.name } });
-                                if (res.ok) {
-                                  toast.success("Ajuste!");
-                                } else {
-                                  toast.error(res.reason);
-                                }
-                              } catch (err) {
-                                toast.error(
-                                  "Não foi possível acionar o PowerShell automaticamente.",
-                                );
-                              }
-                            }}
-                          >
-                            🚀 Abrir Conversor Automático (PowerShell)
-                          </Button>
-                        </div>
-                      )}
-                  </CollapsibleContent>
-                </Collapsible>
+                {file &&
+                  file.size > LOCAL_CONVERTER_THRESHOLD_BYTES &&
+                  typeof window !== "undefined" &&
+                  (window.location.hostname === "localhost" ||
+                    window.location.hostname === "127.0.0.1") && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-3 h-auto px-1 py-1 text-[10px] text-muted-foreground hover:text-foreground"
+                      onClick={runLocalConverter}
+                    >
+                      💡 Arquivo grande ({formatBytes(file.size)}). Sugestão: abrir o conversor automático (mp4-mp3 fatiado). Depois, transcrever os trechos separadamente.
+                      (PowerShell)
+                    </Button>
+                  )}
               </TabsContent>
 
               <TabsContent value="youtube" className="m-0 p-5 space-y-4">
@@ -1156,6 +1121,22 @@ function Index() {
                     <span className="text-[10px] font-mono tabular-nums">{fontSize}px</span>
                   </div>
 
+                  {/* Controle de Espaçamento entre Parágrafos */}
+                  <div className="flex items-center gap-2 mr-1 text-muted-foreground select-none bg-background/20 border border-border px-3 py-1 rounded-full h-8">
+                    <span className="text-[10px] uppercase tracking-wider font-sans">Gap</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="32"
+                      step="2"
+                      value={paragraphGap}
+                      onChange={(e) => setParagraphGap(Number(e.target.value))}
+                      className="w-16 h-1 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                      aria-label="Espaçamento entre parágrafos"
+                    />
+                    <span className="text-[10px] font-mono tabular-nums">{paragraphGap}px</span>
+                  </div>
+
                   <div className="flex items-center gap-1 bg-background/30 border border-border rounded-full p-0.5 mr-1">
                     <button
                       onClick={() => setViewMode("original")}
@@ -1245,7 +1226,8 @@ function Index() {
 
                   <ActionButton
                     onClick={() => {
-                      const activeText = viewMode === "original" ? result.originalText : result.text;
+                      const activeText =
+                        viewMode === "original" ? result.originalText : result.text;
                       navigator.clipboard.writeText(activeText);
                       toast.success("Copiado.");
                     }}
@@ -1255,7 +1237,8 @@ function Index() {
                   </ActionButton>
                   <ActionButton
                     onClick={() => {
-                      const activeText = viewMode === "original" ? result.originalText : result.text;
+                      const activeText =
+                        viewMode === "original" ? result.originalText : result.text;
                       const blob = new Blob([activeText], { type: "text/plain;charset=utf-8" });
                       downloadBlob(blob, `transcricao-${Date.now()}.txt`);
                     }}
@@ -1265,7 +1248,8 @@ function Index() {
                   </ActionButton>
                   <ActionButton
                     onClick={async () => {
-                      const activeText = viewMode === "original" ? result.originalText : result.text;
+                      const activeText =
+                        viewMode === "original" ? result.originalText : result.text;
                       const blob = await buildTranscriptDocx({
                         title: "Transcrição",
                         text: activeText,
@@ -1317,12 +1301,13 @@ function Index() {
                         ? viewMode === "original"
                           ? { ...r, originalText: next }
                           : { ...r, text: next }
-                        : r
+                        : r,
                     )
                   }
                   isReviewer={isReviewer}
                   groupByParagraph={viewMode === "original" ? false : hasMergedParagraphs}
                   fontSize={fontSize}
+                  paragraphGap={paragraphGap}
                 />
               </div>
             </motion.section>
@@ -1397,4 +1382,9 @@ function formatDuration(ms: number): string {
   const m = Math.floor(s / 60);
   const rs = s % 60;
   return `${m}m ${rs}s`;
+}
+
+function formatBytes(bytes: number): string {
+  const megabytes = bytes / (1024 * 1024);
+  return megabytes >= 1024 ? `${(megabytes / 1024).toFixed(1)} GB` : `${Math.round(megabytes)} MB`;
 }

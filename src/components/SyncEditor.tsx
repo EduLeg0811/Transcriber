@@ -214,6 +214,7 @@ export function SyncEditor({
   isReviewer = false,
   groupByParagraph = false,
   fontSize = 15,
+  paragraphGap = 12,
 }: {
   file: File | null;
   youtubeUrl?: string | null;
@@ -223,6 +224,7 @@ export function SyncEditor({
   isReviewer?: boolean;
   groupByParagraph?: boolean;
   fontSize?: number;
+  paragraphGap?: number;
 }) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -508,12 +510,18 @@ export function SyncEditor({
         className="max-h-[50vh] overflow-y-auto rounded-xl border border-border bg-background/40 p-2"
       >
         <ol className="space-y-1.5">
-          {displaySegments.map((seg) => {
+          {displaySegments.map((seg, index) => {
             const isActive = !isReviewer && seg.idx === activeIdx && duration > 0;
             return (
               <li
                 key={seg.idx}
                 data-seg={seg.idx}
+                style={{
+                  marginBottom:
+                    seg.hasParagraphBreak && index < displaySegments.length - 1
+                      ? `${paragraphGap}px`
+                      : undefined,
+                }}
                 className={`group relative flex gap-3 rounded-lg px-3 py-2 transition-colors ${isActive ? "bg-primary/10 ring-1 ring-primary/40" : "hover:bg-secondary/40"
                   /*} ${seg.hasParagraphBreak ? "mb-6 border-b border-border/20 pb-4" : ""}*/}`}
               >
