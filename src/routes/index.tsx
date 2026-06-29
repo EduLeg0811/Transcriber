@@ -18,6 +18,8 @@ import {
   Wand2,
   Mic,
   Film,
+  Download,
+  WrapText,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -38,9 +40,11 @@ import {
 import {
   transcribeChunkFn,
   polishFn,
+  mergeParagraphsFn,
   youtubeCaptionsFn,
   youtubeMetadataFn,
   launchLocalConverterFn,
+  downloadYoutubeAudioFn,
 } from "@/lib/transcribe.functions";
 import { splitMediaIntoAudioChunks } from "@/lib/audio-split";
 import { buildTranscriptDocx, downloadBlob } from "@/lib/docx-export";
@@ -87,12 +91,6 @@ const POLISH_MODELS = [
   { value: "gpt-5.4-nano", label: "gpt-5.4-nano" },
 ] as const;
 
-const TEMPERATURE_OPTIONS = [
-  { value: "0.0", label: "0.0" },
-  { value: "0.3", label: "0.3" },
-  { value: "0.7", label: "0.7" },
-  { value: "1.0", label: "1.0" },
-] as const;
 
 const REASONING_EFFORT_OPTIONS = [
   { value: "default", label: "default" },
@@ -149,15 +147,19 @@ function Index() {
   const [temperature, setTemperature] = useState<number>(0.3);
   const [reasoningEffort, setReasoningEffort] = useState<string>("low");
   const [isPolishingResult, setIsPolishingResult] = useState(false);
+  const [isMergingParagraphs, setIsMergingParagraphs] = useState(false);
   const [hasPolished, setHasPolished] = useState(false);
+  const [hasMergedParagraphs, setHasMergedParagraphs] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [result, setResult] = useState<{
     text: string;
+    originalText: string;
     sourceLabel: string;
     kind: "file" | "youtube";
     durationMs: number;
     initialSegments?: Array<{ start: number; end: number; text: string }>;
   } | null>(null);
+  const [viewMode, setViewMode] = useState<"original" | "corrected">("original");
   const [vocabOpen, setVocabOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
@@ -177,7 +179,9 @@ function Index() {
 
   const transcribeChunk = useServerFn(transcribeChunkFn);
   const polishCall = useServerFn(polishFn);
+  const mergeParagraphsCall = useServerFn(mergeParagraphsFn);
   const fetchYTCaptions = useServerFn(youtubeCaptionsFn);
+  const downloadYTAudio = useServerFn(downloadYoutubeAudioFn);
 
   useEffect(() => {
     setVocab(loadVocabulary());
@@ -245,7 +249,7 @@ function Index() {
         typeof window !== "undefined" &&
         (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
       if (isLocal) {
-        toast.warning("Vídeo muito grande! Risco de erro de memória no navegador.", {
+        toast.warning("Vídeo muito grande!", {
           duration: 15000,
           action: {
             label: "Abrir Conversor Local (Terminal)",
@@ -267,14 +271,16 @@ function Index() {
         });
       } else {
         toast.warning(
-          "Vídeo muito grande! Risco de erro de memória no navegador. Recomendamos extrair o áudio (.mp3) localmente antes do envio.",
-          { duration: 12000 },
+          "Vídeo muito grande! Recomendamos extrair o áudio (.mp3) localmente antes do envio.",
+          { duration: 5000 },
         );
       }
     }
     const started = performance.now();
     setResult(null);
     setHasPolished(false);
+    setHasMergedParagraphs(false);
+    setViewMode("original");
     try {
       const totalDuration = await getMediaDuration(file);
       const segmentSeconds = model.includes("gpt-4o") ? 60 : 300;
@@ -356,6 +362,7 @@ function Index() {
       const durationMs = Math.round(performance.now() - started);
       setResult({
         text: full,
+        originalText: full,
         sourceLabel: file.name,
         kind: "file",
         durationMs,
@@ -389,6 +396,8 @@ function Index() {
     const started = performance.now();
     setResult(null);
     setHasPolished(false);
+    setHasMergedParagraphs(false);
+    setViewMode("original");
     try {
       setPhase({ kind: "fetching-captions" });
       const res = await fetchYTCaptions({ data: { url: ytUrl.trim() } });
@@ -399,7 +408,14 @@ function Index() {
       }
       let full = res.text;
       const durationMs = Math.round(performance.now() - started);
-      setResult({ text: full, sourceLabel: ytUrl.trim(), kind: "youtube", durationMs });
+      setResult({
+        text: full,
+        originalText: full,
+        sourceLabel: ytUrl.trim(),
+        kind: "youtube",
+        durationMs,
+        initialSegments: res.segments || [],
+      });
       saveHistoryItem({
         id: crypto.randomUUID(),
         createdAt: Date.now(),
@@ -409,6 +425,7 @@ function Index() {
         polished: false,
         model: "youtube-captions",
         durationMs,
+        initialSegments: res.segments || [],
       });
       setPhase({ kind: "done" });
       toast.success("Legenda capturada.");
@@ -416,6 +433,40 @@ function Index() {
       const msg = e instanceof Error ? e.message : String(e);
       setPhase({ kind: "error", message: msg });
       toast.error(msg);
+    }
+  }
+
+  async function runDownloadYoutubeAudio() {
+    if (!ytUrl.trim()) {
+      toast.error("Cole o link do YouTube.");
+      return;
+    }
+    setPhase({ kind: "splitting", message: "Iniciando download do áudio..." });
+    try {
+      const res = await downloadYTAudio({ data: { url: ytUrl.trim() } });
+      if (!res.ok) {
+        throw new Error(res.reason);
+      }
+
+      setPhase({ kind: "splitting", message: "Carregando áudio no aplicativo..." });
+
+      const fileRes = await fetch(res.path);
+      const blob = await fileRes.blob();
+      const ext = res.path.split('.').pop() || 'mp3';
+      const filename = ytMetadata?.title
+        ? `${ytMetadata.title.slice(0, 50).replace(/[\\/:*?"<>|]/g, "")}.${ext}`
+        : `${res.id}.${ext}`;
+
+      const downloadedFile = new File([blob], filename, { type: blob.type || `audio/${ext}` });
+      setFile(downloadedFile);
+
+      setTab("file");
+      setPhase({ kind: "done" });
+      toast.success("Áudio baixado e carregado com sucesso!");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setPhase({ kind: "error", message: msg });
+      toast.error(`Falha no download: ${msg}`);
     }
   }
 
@@ -431,12 +482,15 @@ function Index() {
     const started = performance.now();
     setResult(null);
     setHasPolished(false);
+    setHasMergedParagraphs(false);
+    setViewMode("original");
     try {
       setPhase({ kind: "splitting", message: "Carregando arquivos de revisão…" });
       await new Promise((resolve) => setTimeout(resolve, 800));
       const durationMs = Math.round(performance.now() - started);
       setResult({
         text: reviewText,
+        originalText: reviewText,
         sourceLabel: file.name,
         kind: "file",
         durationMs,
@@ -463,12 +517,15 @@ function Index() {
     const started = performance.now();
     setResult(null);
     setHasPolished(false);
+    setHasMergedParagraphs(false);
+    setViewMode("original");
     try {
       setPhase({ kind: "fetching-captions" });
       await new Promise((resolve) => setTimeout(resolve, 800));
       const durationMs = Math.round(performance.now() - started);
       setResult({
         text: reviewText,
+        originalText: reviewText,
         sourceLabel: ytUrl.trim(),
         kind: "youtube",
         durationMs,
@@ -499,12 +556,38 @@ function Index() {
       });
       setResult((r) => (r ? { ...r, text } : r));
       setHasPolished(true);
+      setViewMode("corrected");
       toast.success("Polimento concluído!", { id: toastId });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`Falha no polimento: ${msg}`, { id: toastId });
     } finally {
       setIsPolishingResult(false);
+    }
+  }
+
+  async function runMergeParagraphs() {
+    if (!result?.text) return;
+    setIsMergingParagraphs(true);
+    const toastId = toast.loading("Combinando parágrafos com IA...");
+    try {
+      const { text } = await mergeParagraphsCall({
+        data: {
+          text: result.text,
+          model: polishModel,
+          temperature,
+          reasoningEffort,
+        },
+      });
+      setResult((r) => (r ? { ...r, text } : r));
+      setHasMergedParagraphs(true);
+      setViewMode("corrected");
+      toast.success("Parágrafos combinados!", { id: toastId });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Falha ao combinar parágrafos: ${msg}`, { id: toastId });
+    } finally {
+      setIsMergingParagraphs(false);
     }
   }
 
@@ -585,26 +668,39 @@ function Index() {
                   </TabsTrigger>
                 </TabsList>
 
-                {/* Botão Revisor */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsReviewer(!isReviewer);
-                    if (phase.kind === "error") {
-                      setPhase({ kind: "idle" });
-                    }
-                  }}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
-                    isReviewer
-                      ? "bg-primary/10 text-primary border-primary/25 hover:bg-primary/20"
-                      : "bg-background/40 text-muted-foreground border-border hover:text-foreground hover:bg-secondary/40"
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${isReviewer ? "bg-primary animate-pulse" : "bg-muted-foreground"}`}
-                  />
-                  Revisor
-                </button>
+                {/* Botões Transcrever / Revisor */}
+                <div className="flex items-center gap-1 bg-background/30 border border-border rounded-full p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsReviewer(false);
+                      if (phase.kind === "error") {
+                        setPhase({ kind: "idle" });
+                      }
+                    }}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all border ${!isReviewer
+                        ? "bg-primary/10 text-primary border-primary/25 shadow-sm"
+                        : "text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40"
+                      }`}
+                  >
+                    Transcrever
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsReviewer(true);
+                      if (phase.kind === "error") {
+                        setPhase({ kind: "idle" });
+                      }
+                    }}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all border ${isReviewer
+                        ? "bg-primary/10 text-primary border-primary/25 shadow-sm"
+                        : "text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40"
+                      }`}
+                  >
+                    Revisar
+                  </button>
+                </div>
               </div>
 
               <TabsContent value="file" className="m-0 p-5">
@@ -988,6 +1084,19 @@ function Index() {
                           {ytMetadata.author}
                         </p>
                       )}
+                      <div className="pt-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[10px] px-2.5 font-medium border-border hover:bg-secondary/50 text-foreground gap-1.5"
+                          disabled={busy}
+                          onClick={runDownloadYoutubeAudio}
+                        >
+                          <Download className="h-3 w-3" />
+                          Baixar Áudio para o App
+                        </Button>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -1032,97 +1141,97 @@ function Index() {
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {!isReviewer ? (
-                    <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-border bg-background/20 px-3 py-1 mr-2">
-                      <Select
-                        value={polishModel}
-                        onValueChange={(v) => setPolishModel(v as typeof polishModel)}
-                        disabled={isPolishingResult}
-                      >
-                        <SelectTrigger className="h-7 w-[100px] border-none bg-transparent text-xs py-0 focus:ring-0 shadow-none">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {POLISH_MODELS.map((pm) => (
-                            <SelectItem key={pm.value} value={pm.value} className="text-xs">
-                              {pm.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <div className="h-4 w-px bg-border" />
-                      <Select
-                        value={String(temperature)}
-                        onValueChange={(v) => setTemperature(parseFloat(v))}
-                        disabled={isPolishingResult}
-                      >
-                        <SelectTrigger className="h-7 w-[75px] border-none bg-transparent text-xs py-0 focus:ring-0 shadow-none">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TEMPERATURE_OPTIONS.map((to) => (
-                            <SelectItem key={to.value} value={to.value} className="text-xs">
-                              {to.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <div className="h-4 w-px bg-border" />
-                      <Select
-                        value={reasoningEffort}
-                        onValueChange={setReasoningEffort}
-                        disabled={isPolishingResult}
-                      >
-                        <SelectTrigger className="h-7 w-[100px] border-none bg-transparent text-xs py-0 focus:ring-0 shadow-none">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {REASONING_EFFORT_OPTIONS.map((re) => (
-                            <SelectItem key={re.value} value={re.value} className="text-xs">
-                              {re.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <button
-                        onClick={runPostPolish}
-                        disabled={isPolishingResult || !result.text}
-                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-                          hasPolished
-                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
-                            : "bg-primary/10 text-primary hover:bg-primary/20"
+                  <div className="flex items-center gap-1 bg-background/30 border border-border rounded-full p-0.5 mr-1">
+                    <button
+                      onClick={() => setViewMode("original")}
+                      className={`rounded-full px-3.5 py-1 text-xs font-medium transition-all ${viewMode === "original"
+                          ? "bg-primary text-primary-foreground shadow-sm scale-102"
+                          : "text-muted-foreground hover:text-foreground"
                         }`}
-                      >
-                        {isPolishingResult ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Wand2 className="h-3 w-3" />
-                        )}
-                        Polir com IA
-                      </button>
-                    </div>
-                  ) : (
+                    >
+                      Original
+                    </button>
+                    <button
+                      onClick={() => setViewMode("corrected")}
+                      className={`rounded-full px-3.5 py-1 text-xs font-medium transition-all ${viewMode === "corrected"
+                          ? "bg-primary text-primary-foreground shadow-sm scale-102"
+                          : "text-muted-foreground hover:text-foreground"
+                        }`}
+                    >
+                      Corrigido
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-border bg-background/20 px-3 py-1 mr-2">
+                    <Select
+                      value={polishModel}
+                      onValueChange={(v) => setPolishModel(v as typeof polishModel)}
+                      disabled={isPolishingResult || isMergingParagraphs}
+                    >
+                      <SelectTrigger className="h-7 w-[100px] border-none bg-transparent text-xs py-0 focus:ring-0 shadow-none">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {POLISH_MODELS.map((pm) => (
+                          <SelectItem key={pm.value} value={pm.value} className="text-xs">
+                            {pm.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="h-4 w-px bg-border" />
+                    <Select
+                      value={reasoningEffort}
+                      onValueChange={setReasoningEffort}
+                      disabled={isPolishingResult || isMergingParagraphs}
+                    >
+                      <SelectTrigger className="h-7 w-[100px] border-none bg-transparent text-xs py-0 focus:ring-0 shadow-none">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {REASONING_EFFORT_OPTIONS.map((re) => (
+                          <SelectItem key={re.value} value={re.value} className="text-xs">
+                            {re.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <button
                       onClick={runPostPolish}
-                      disabled={isPolishingResult || !result.text}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 border border-border mr-2 ${
-                        hasPolished
-                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-500/30 hover:bg-blue-200 dark:hover:bg-blue-900/60"
-                          : "bg-background/40 text-foreground/90 hover:text-primary hover:border-primary/40 hover:bg-secondary/40"
-                      }`}
+                      disabled={isPolishingResult || isMergingParagraphs || !result.text}
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${hasPolished
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
+                          : "bg-primary/10 text-primary hover:bg-primary/20"
+                        }`}
                     >
                       {isPolishingResult ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
-                        <Wand2 className="h-3.5 w-3.5" />
+                        <Wand2 className="h-3 w-3" />
                       )}
                       Polir com IA
                     </button>
-                  )}
+                    <button
+                      onClick={runMergeParagraphs}
+                      disabled={isPolishingResult || isMergingParagraphs || !result.text}
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${hasMergedParagraphs
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
+                          : "bg-primary/10 text-primary hover:bg-primary/20"
+                        }`}
+                    >
+                      {isMergingParagraphs ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <WrapText className="h-3 w-3" />
+                      )}
+                      Combinar Parágrafos
+                    </button>
+                  </div>
 
                   <ActionButton
                     onClick={() => {
-                      navigator.clipboard.writeText(result.text);
+                      const activeText = viewMode === "original" ? result.originalText : result.text;
+                      navigator.clipboard.writeText(activeText);
                       toast.success("Copiado.");
                     }}
                     icon={<Copy className="h-3.5 w-3.5" />}
@@ -1131,7 +1240,8 @@ function Index() {
                   </ActionButton>
                   <ActionButton
                     onClick={() => {
-                      const blob = new Blob([result.text], { type: "text/plain;charset=utf-8" });
+                      const activeText = viewMode === "original" ? result.originalText : result.text;
+                      const blob = new Blob([activeText], { type: "text/plain;charset=utf-8" });
                       downloadBlob(blob, `transcricao-${Date.now()}.txt`);
                     }}
                     icon={<FileText className="h-3.5 w-3.5" />}
@@ -1140,9 +1250,10 @@ function Index() {
                   </ActionButton>
                   <ActionButton
                     onClick={async () => {
+                      const activeText = viewMode === "original" ? result.originalText : result.text;
                       const blob = await buildTranscriptDocx({
                         title: "Transcrição",
-                        text: result.text,
+                        text: activeText,
                         sourceLabel: result.sourceLabel,
                       });
                       downloadBlob(blob, `transcricao-${Date.now()}.docx`);
@@ -1183,10 +1294,19 @@ function Index() {
                 <SyncEditor
                   file={result.kind === "file" ? file : null}
                   youtubeUrl={result.kind === "youtube" ? result.sourceLabel : null}
-                  text={result.text}
+                  text={viewMode === "original" ? result.originalText : result.text}
                   initialSegments={result.initialSegments}
-                  onChange={(next) => setResult((r) => (r ? { ...r, text: next } : r))}
+                  onChange={(next) =>
+                    setResult((r) =>
+                      r
+                        ? viewMode === "original"
+                          ? { ...r, originalText: next }
+                          : { ...r, text: next }
+                        : r
+                    )
+                  }
                   isReviewer={isReviewer}
+                  groupByParagraph={viewMode === "original" ? false : hasMergedParagraphs}
                 />
               </div>
             </motion.section>

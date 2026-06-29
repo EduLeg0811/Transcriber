@@ -10,25 +10,31 @@ import {
   ChevronsUpDown,
 } from "lucide-react";
 
-type Segment = { idx: number; text: string; start: number; end: number };
+type Segment = { idx: number; text: string; start: number; end: number; hasParagraphBreak?: boolean };
 
-function splitIntoSegments(text: string): { text: string; offset: number }[] {
+function splitIntoSegments(text: string): { text: string; offset: number; hasParagraphBreak: boolean }[] {
   // Split on sentence boundaries, keep punctuation. Fallback to line breaks.
   const raw = text.replace(/\r\n/g, "\n");
-  const parts: { text: string; offset: number }[] = [];
-  const re = /[^.!?\n]+[.!?]+["')\]]*|\S[^\n]*$/g;
+  const parts: { text: string; offset: number; hasParagraphBreak: boolean }[] = [];
+  const re = /[^.!?\n]+[.!?]+["')\]]*|\S[^\n]*/g;
   let m: RegExpExecArray | null;
-  let last = 0;
   while ((m = re.exec(raw)) !== null) {
     const t = m[0].trim();
     if (t.length === 0) continue;
-    parts.push({ text: t, offset: m.index });
-    last = m.index + m[0].length;
+    parts.push({ text: t, offset: m.index, hasParagraphBreak: false });
   }
   if (parts.length === 0 && raw.trim().length > 0) {
-    parts.push({ text: raw.trim(), offset: 0 });
+    parts.push({ text: raw.trim(), offset: 0, hasParagraphBreak: false });
   }
-  void last;
+
+  // Post-process to determine if there is a paragraph break (\n\n) between parts
+  for (let i = 0; i < parts.length - 1; i++) {
+    const currentEnd = parts[i].offset + parts[i].text.length;
+    const nextStart = parts[i + 1].offset;
+    const separator = raw.substring(currentEnd, nextStart);
+    parts[i].hasParagraphBreak = separator.includes("\n\n") || separator.split("\n").length > 2;
+  }
+
   return parts;
 }
 
@@ -72,7 +78,7 @@ function alignAndInterpolate(
       const start = (acc / totalChars) * duration;
       acc += p.text.length;
       const end = (acc / totalChars) * duration;
-      return { idx: i, text: p.text, start, end };
+      return { idx: i, text: p.text, start, end, hasParagraphBreak: p.hasParagraphBreak };
     });
   }
 
@@ -139,7 +145,7 @@ function alignAndInterpolate(
 
     if (matchedAIdx !== undefined) {
       const orig = originalSegments[matchedAIdx];
-      return { idx: bIdx, text: part.text, start: orig.start, end: orig.end };
+      return { idx: bIdx, text: part.text, start: orig.start, end: orig.end, hasParagraphBreak: part.hasParagraphBreak };
     }
 
     // Unmatched segment: interpolate between nearest matched segments
@@ -171,8 +177,32 @@ function alignAndInterpolate(
     const start = tBefore + ((kInGap - 1) / gapSize) * (tAfter - tBefore);
     const end = tBefore + (kInGap / gapSize) * (tAfter - tBefore);
 
-    return { idx: bIdx, text: part.text, start, end };
+    return { idx: bIdx, text: part.text, start, end, hasParagraphBreak: part.hasParagraphBreak };
   });
+}
+
+function groupSegmentsIntoParagraphs(sentenceSegments: Segment[]): Segment[] {
+  if (sentenceSegments.length === 0) return [];
+  const paragraphs: Segment[] = [];
+  let currentGroup: Segment[] = [];
+
+  for (const seg of sentenceSegments) {
+    currentGroup.push(seg);
+    if (seg.hasParagraphBreak || seg === sentenceSegments[sentenceSegments.length - 1]) {
+      const text = currentGroup.map((s) => s.text).join(" ");
+      const start = currentGroup[0].start;
+      const end = currentGroup[currentGroup.length - 1].end;
+      paragraphs.push({
+        idx: paragraphs.length,
+        text,
+        start,
+        end,
+        hasParagraphBreak: true,
+      });
+      currentGroup = [];
+    }
+  }
+  return paragraphs;
 }
 
 export function SyncEditor({
@@ -182,6 +212,7 @@ export function SyncEditor({
   initialSegments,
   onChange,
   isReviewer = false,
+  groupByParagraph = false,
 }: {
   file: File | null;
   youtubeUrl?: string | null;
@@ -189,6 +220,7 @@ export function SyncEditor({
   initialSegments?: Array<{ start: number; end: number; text: string }>;
   onChange: (next: string) => void;
   isReviewer?: boolean;
+  groupByParagraph?: boolean;
 }) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -197,7 +229,7 @@ export function SyncEditor({
   const [playing, setPlaying] = useState(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [isVideo, setIsVideo] = useState(false);
-  const [segments, setSegments] = useState<Segment[]>([]);
+  const [sentenceSegments, setSentenceSegments] = useState<Segment[]>([]);
   const [autoScroll, setAutoScroll] = useState(true);
 
   const prevFileRef = useRef<File | null>(null);
@@ -222,11 +254,11 @@ export function SyncEditor({
     const durationChanged = prevDurationRef.current !== duration;
 
     // If the text change matches what we just sent up, and duration didn't change, ignore it to prevent alignment jitter.
-    if (text === lastPropsTextRef.current && segments.length > 0 && !durationChanged) {
+    if (text === lastPropsTextRef.current && sentenceSegments.length > 0 && !durationChanged) {
       return;
     }
 
-    if (isNewMedia || durationLoaded || segments.length === 0) {
+    if (isNewMedia || durationLoaded || sentenceSegments.length === 0) {
       if (initialSegments && initialSegments.length > 0) {
         const initialSegs = initialSegments.map((s, i) => ({
           idx: i,
@@ -234,7 +266,8 @@ export function SyncEditor({
           start: s.start,
           end: s.end,
         }));
-        setSegments(initialSegs);
+        const aligned = alignAndInterpolate(initialSegs, text, duration);
+        setSentenceSegments(aligned);
       } else {
         const parts = splitIntoSegments(text);
         const totalChars = Math.max(
@@ -246,13 +279,13 @@ export function SyncEditor({
           const start = (acc / totalChars) * duration;
           acc += p.text.length;
           const end = (acc / totalChars) * duration;
-          return { idx: i, text: p.text, start, end };
+          return { idx: i, text: p.text, start, end, hasParagraphBreak: p.hasParagraphBreak };
         });
-        setSegments(initialSegs);
+        setSentenceSegments(initialSegs);
       }
     } else {
-      const alignedSegs = alignAndInterpolate(segments, text, duration);
-      setSegments(alignedSegs);
+      const alignedSegs = alignAndInterpolate(sentenceSegments, text, duration);
+      setSentenceSegments(alignedSegs);
     }
 
     lastPropsTextRef.current = text;
@@ -261,10 +294,17 @@ export function SyncEditor({
     prevDurationRef.current = duration;
   }, [text, duration, file, youtubeUrl, initialSegments]);
 
+  const displaySegments = useMemo(() => {
+    if (groupByParagraph) {
+      return groupSegmentsIntoParagraphs(sentenceSegments);
+    }
+    return sentenceSegments;
+  }, [sentenceSegments, groupByParagraph]);
+
   const activeIdx = useMemo(() => {
     if (!duration) return -1;
-    return segments.findIndex((s) => currentTime >= s.start && currentTime < s.end);
-  }, [segments, currentTime, duration]);
+    return displaySegments.findIndex((s) => currentTime >= s.start && currentTime < s.end);
+  }, [displaySegments, currentTime, duration]);
 
   // Auto-scroll active segment into view
   useEffect(() => {
@@ -292,9 +332,16 @@ export function SyncEditor({
   }
 
   function updateSegment(idx: number, next: string) {
-    const updated = segments.map((s, i) => (i === idx ? { ...s, text: next } : s));
-    setSegments(updated);
-    const joinedText = updated.map((s) => s.text).join(" ");
+    const updated = displaySegments.map((s, i) => (i === idx ? { ...s, text: next } : s));
+    let joinedText = "";
+    for (let i = 0; i < updated.length; i++) {
+      joinedText += updated[i].text;
+      if (i < updated.length - 1) {
+        joinedText += updated[i].hasParagraphBreak ? "\n\n" : " ";
+      }
+    }
+    const aligned = alignAndInterpolate(sentenceSegments, joinedText, duration);
+    setSentenceSegments(aligned);
     lastPropsTextRef.current = joinedText;
     onChange(joinedText);
   }
@@ -439,11 +486,10 @@ export function SyncEditor({
             </span>
             <button
               onClick={() => setAutoScroll(!autoScroll)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
-                autoScroll
-                  ? "bg-primary/10 text-primary border-primary/25 hover:bg-primary/20"
-                  : "bg-background/40 text-muted-foreground border-border hover:text-foreground hover:bg-secondary/40"
-              }`}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${autoScroll
+                ? "bg-primary/10 text-primary border-primary/25 hover:bg-primary/20"
+                : "bg-background/40 text-muted-foreground border-border hover:text-foreground hover:bg-secondary/40"
+                }`}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${autoScroll ? "bg-primary animate-pulse" : "bg-muted-foreground"}`}
@@ -460,23 +506,21 @@ export function SyncEditor({
         className="max-h-[50vh] overflow-y-auto rounded-xl border border-border bg-background/40 p-2"
       >
         <ol className="space-y-1.5">
-          {segments.map((seg) => {
+          {displaySegments.map((seg) => {
             const isActive = !isReviewer && seg.idx === activeIdx && duration > 0;
             return (
               <li
                 key={seg.idx}
                 data-seg={seg.idx}
-                className={`group relative flex gap-3 rounded-lg px-3 py-2 transition-colors ${
-                  isActive ? "bg-primary/10 ring-1 ring-primary/40" : "hover:bg-secondary/40"
-                }`}
+                className={`group relative flex gap-3 rounded-lg px-3 py-2 transition-colors ${isActive ? "bg-primary/10 ring-1 ring-primary/40" : "hover:bg-secondary/40"
+                  /*} ${seg.hasParagraphBreak ? "mb-6 border-b border-border/20 pb-4" : ""}*/}`}
               >
                 <button
                   onClick={() => seekTo(seg.start)}
-                  className={`mt-1 inline-flex h-5 shrink-0 items-center rounded-full px-2 font-mono text-[10px] tabular-nums transition-colors ${
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-muted-foreground group-hover:text-foreground"
-                  }`}
+                  className={`mt-1 inline-flex h-5 shrink-0 items-center rounded-full px-2 font-mono text-[10px] tabular-nums transition-colors ${isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground group-hover:text-foreground"
+                    }`}
                   title="Saltar para este trecho"
                 >
                   {timestamp(seg.start)}
@@ -495,7 +539,7 @@ export function SyncEditor({
               </li>
             );
           })}
-          {segments.length === 0 && (
+          {displaySegments.length === 0 && (
             <li className="px-3 py-6 text-center text-sm text-muted-foreground">Sem texto.</li>
           )}
         </ol>

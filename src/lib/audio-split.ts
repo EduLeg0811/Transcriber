@@ -131,9 +131,12 @@ export async function splitMediaIntoAudioChunks(
       const outName = `out_${String(i).padStart(3, "0")}.mp3`;
       try {
         const data = (await ff.readFile(outName)) as Uint8Array;
-        if (data && data.length > 0) {
+        if (data && data.length > 8192) {
           const buf = new Uint8Array(data);
           chunks.push(new File([buf], outName, { type: "audio/mpeg" }));
+          await ff.deleteFile(outName);
+        } else if (data) {
+          console.log(`[FFmpeg] Descartando chunk insignificante/corrompido: ${outName} (${data.length} bytes)`);
           await ff.deleteFile(outName);
         }
       } catch (err) {
