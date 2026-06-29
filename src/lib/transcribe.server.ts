@@ -3,6 +3,78 @@ import { promisify } from "util";
 
 const OPENAI_URL = "https://api.openai.com/v1";
 const execPromise = promisify(exec);
+const RETRYABLE_STATUS = new Set([408, 409, 429]);
+const MAX_OPENAI_ATTEMPTS = 3;
+
+async function fetchOpenAI(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_OPENAI_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      if (
+        response.ok ||
+        (!RETRYABLE_STATUS.has(response.status) && response.status < 500) ||
+        attempt === MAX_OPENAI_ATTEMPTS
+      ) {
+        return response;
+      }
+
+      const retryAfter = Number(response.headers.get("retry-after"));
+      const delayMs = Number.isFinite(retryAfter)
+        ? retryAfter * 1000
+        : 500 * 2 ** (attempt - 1) + Math.floor(Math.random() * 250);
+      await response.body?.cancel();
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    } catch (error) {
+      lastError = error;
+      if (attempt === MAX_OPENAI_ATTEMPTS) break;
+      await new Promise((resolve) =>
+        setTimeout(resolve, 500 * 2 ** (attempt - 1) + Math.floor(Math.random() * 250)),
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  if (lastError instanceof Error && lastError.name === "AbortError") {
+    throw new Error("A OpenAI excedeu o tempo limite da requisição.");
+  }
+  throw lastError instanceof Error ? lastError : new Error("Falha de comunicação com a OpenAI.");
+}
+
+function maxCompletionTokens(text: string): number {
+  return Math.min(120_000, Math.max(1_024, Math.ceil(text.length / 2.5) + 512));
+}
+
+function requireOutput(content: string | undefined, operation: string): string {
+  const output = content?.trim();
+  if (!output) throw new Error(`A OpenAI retornou uma resposta vazia durante ${operation}.`);
+  return output;
+}
+
+function normalizedWords(text: string): string[] {
+  return text
+    .normalize("NFKC")
+    .toLocaleLowerCase("pt-BR")
+    .match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) ?? [];
+}
+
+export function assertSameWords(source: string, candidate: string): void {
+  const expected = normalizedWords(source);
+  const actual = normalizedWords(candidate);
+  if (expected.length !== actual.length || expected.some((word, index) => word !== actual[index])) {
+    throw new Error(
+      "A combinação de parágrafos foi rejeitada porque alterou, removeu ou reordenou palavras.",
+    );
+  }
+}
 
 export interface YouTubeCaptionsResult {
   text: string;
@@ -58,11 +130,15 @@ export async function callWhisper(opts: {
     form.append("prompt", prompt);
   }
 
-  const res = await fetch(`${OPENAI_URL}/audio/transcriptions`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form,
-  });
+  const res = await fetchOpenAI(
+    `${OPENAI_URL}/audio/transcriptions`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+    },
+    120_000,
+  );
 
   if (!res.ok) {
     const errText = await res.text();
@@ -115,6 +191,7 @@ Regras:
       { role: "system", content: system },
       { role: "user", content: opts.text },
     ],
+    max_completion_tokens: maxCompletionTokens(opts.text),
   };
 
   // Only pass temperature if specified and not using a reasoning-only model (like o1/o3/gpt-5/reasoning)
@@ -130,14 +207,18 @@ Regras:
     requestBody.reasoning_effort = opts.reasoningEffort;
   }
 
-  const res = await fetch(`${OPENAI_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+  const res = await fetchOpenAI(
+    `${OPENAI_URL}/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
     },
-    body: JSON.stringify(requestBody),
-  });
+    180_000,
+  );
 
   if (!res.ok) {
     const errText = await res.text();
@@ -146,7 +227,7 @@ Regras:
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
-  return data.choices?.[0]?.message?.content?.trim() ?? opts.text;
+  return requireOutput(data.choices?.[0]?.message?.content, "o ajuste da transcrição");
 }
 
 export async function callMergeParagraphs(opts: {
@@ -174,6 +255,7 @@ REGRAS:
       { role: "system", content: system },
       { role: "user", content: opts.text },
     ],
+    max_completion_tokens: maxCompletionTokens(opts.text),
   };
 
   const isReasoning =
@@ -188,14 +270,18 @@ REGRAS:
     requestBody.reasoning_effort = opts.reasoningEffort;
   }
 
-  const res = await fetch(`${OPENAI_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+  const res = await fetchOpenAI(
+    `${OPENAI_URL}/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
     },
-    body: JSON.stringify(requestBody),
-  });
+    180_000,
+  );
 
   if (!res.ok) {
     const errText = await res.text();
@@ -204,7 +290,12 @@ REGRAS:
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
-  return data.choices?.[0]?.message?.content?.trim() ?? opts.text;
+  const output = requireOutput(
+    data.choices?.[0]?.message?.content,
+    "a combinação de parágrafos",
+  );
+  assertSameWords(opts.text, output);
+  return output;
 }
 
 // Parse YouTube ID from common URL shapes.

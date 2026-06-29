@@ -54,7 +54,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Transcreve áudio e vídeo para texto em PT-BR" },
+      { title: "Transcritor de áudio e vídeo para texto" },
       {
         name: "description",
         content:
@@ -79,6 +79,11 @@ type Phase =
   | { kind: "fetching-captions" }
   | { kind: "done" }
   | { kind: "error"; message: string };
+
+type TranscribedChunk = {
+  text: string;
+  segments: Array<{ start: number; end: number; text: string }>;
+};
 
 const MODELS = [
   { value: "gpt-4o-mini-transcribe", label: "Rápido — gpt-4o-mini-transcribe" },
@@ -180,6 +185,7 @@ function Index() {
   const [isReviewer, setIsReviewer] = useState(false);
   const [reviewText, setReviewText] = useState("");
   const [reviewTextFile, setReviewTextFile] = useState<File | null>(null);
+  const transcriptionCacheRef = useRef<Map<string, Map<number, TranscribedChunk>>>(new Map());
 
   const transcribeChunk = useServerFn(transcribeChunkFn);
   const polishCall = useServerFn(polishFn);
@@ -277,6 +283,7 @@ function Index() {
     setHasPolished(false);
     setHasMergedParagraphs(false);
     setViewMode("original");
+    let completedChunkCount = 0;
     try {
       const totalDuration = await getMediaDuration(file);
       const segmentSeconds = 300;
@@ -289,6 +296,19 @@ function Index() {
             maxSeconds = limitSecs;
           }
         }
+      }
+      const cacheKey = [
+        file.name,
+        file.size,
+        file.lastModified,
+        model,
+        vocab,
+        maxSeconds ?? "all",
+      ].join("\u0000");
+      let cachedChunks = transcriptionCacheRef.current.get(cacheKey);
+      if (!cachedChunks) {
+        cachedChunks = new Map();
+        transcriptionCacheRef.current.set(cacheKey, cachedChunks);
       }
       setPhase({ kind: "splitting", message: "Preparando áudio…" });
       const chunks = await splitMediaIntoAudioChunks(
@@ -311,11 +331,17 @@ function Index() {
         }
 
         setPhase({ kind: "transcribing", current: i + 1, total: chunks.length });
-        const fd = new FormData();
-        fd.append("file", chunks[i]);
-        fd.append("vocabulary", vocab);
-        fd.append("model", model);
-        const { text, segments } = await transcribeChunk({ data: fd });
+        let chunkResult = cachedChunks.get(i);
+        if (!chunkResult) {
+          const fd = new FormData();
+          fd.append("file", chunks[i]);
+          fd.append("vocabulary", vocab);
+          fd.append("model", model);
+          chunkResult = await transcribeChunk({ data: fd });
+          cachedChunks.set(i, chunkResult);
+        }
+        completedChunkCount++;
+        const { text, segments } = chunkResult;
         texts.push(text);
 
         if (segments && segments.length > 0) {
@@ -375,12 +401,17 @@ function Index() {
         durationMs,
         initialSegments: allSegments,
       });
+      transcriptionCacheRef.current.delete(cacheKey);
       setPhase({ kind: "done" });
       toast.success("Transcrição concluída.");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setPhase({ kind: "error", message: msg });
-      toast.error(msg);
+      const resumeHint =
+        completedChunkCount > 0
+          ? " Os trechos concluídos serão reutilizados ao tentar novamente."
+          : "";
+      setPhase({ kind: "error", message: `${msg}${resumeHint}` });
+      toast.error(`${msg}${resumeHint}`);
     }
   }
 

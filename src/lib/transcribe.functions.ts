@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import {
   callPolish,
   callMergeParagraphs,
@@ -9,6 +10,22 @@ import {
   type TranscribeModel,
 } from "./transcribe.server";
 
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+const MAX_TEXT_CHARS = 300_000;
+const TRANSCRIBE_MODELS = new Set<TranscribeModel>([
+  "gpt-4o-mini-transcribe",
+  "gpt-4o-transcribe",
+  "whisper-1",
+]);
+const textOperationSchema = z.object({
+  text: z.string().trim().min(1).max(MAX_TEXT_CHARS),
+  vocabulary: z.string().max(10_000).optional(),
+  model: z.enum(["gpt-5.4-mini", "gpt-5.4-nano"]).optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  reasoningEffort: z.enum(["default", "none", "low", "medium", "high", "xhigh"]).optional(),
+});
+const mergeOperationSchema = textOperationSchema.omit({ vocabulary: true });
+
 // Transcribe one audio chunk. Client sends FormData containing:
 //  - file: Blob (audio)
 //  - vocabulary?: string
@@ -18,8 +35,16 @@ export const transcribeChunkFn = createServerFn({ method: "POST" })
     if (!(data instanceof FormData)) throw new Error("FormData esperado.");
     const file = data.get("file");
     if (!(file instanceof File)) throw new Error("Arquivo de áudio ausente.");
+    if (file.size <= 0 || file.size > MAX_AUDIO_BYTES) {
+      throw new Error("O trecho de áudio deve ter entre 1 byte e 25 MB.");
+    }
     const vocabulary = (data.get("vocabulary") as string | null) ?? "";
-    const model = (data.get("model") as TranscribeModel | null) ?? "gpt-4o-mini-transcribe";
+    if (vocabulary.length > 10_000) throw new Error("Vocabulário acima do limite permitido.");
+    const requestedModel = (data.get("model") as string | null) ?? "gpt-4o-mini-transcribe";
+    if (!TRANSCRIBE_MODELS.has(requestedModel as TranscribeModel)) {
+      throw new Error("Modelo de transcrição não permitido.");
+    }
+    const model = requestedModel as TranscribeModel;
     return { file, vocabulary, model };
   })
   .handler(async ({ data }) => {
@@ -32,15 +57,7 @@ export const transcribeChunkFn = createServerFn({ method: "POST" })
   });
 
 export const polishFn = createServerFn({ method: "POST" })
-  .validator(
-    (data: {
-      text: string;
-      vocabulary?: string;
-      model?: string;
-      temperature?: number;
-      reasoningEffort?: string;
-    }) => data,
-  )
+  .validator((data: unknown) => textOperationSchema.parse(data))
   .handler(async ({ data }) => {
     const text = await callPolish({
       text: data.text,
@@ -53,14 +70,7 @@ export const polishFn = createServerFn({ method: "POST" })
   });
 
 export const mergeParagraphsFn = createServerFn({ method: "POST" })
-  .validator(
-    (data: {
-      text: string;
-      model?: string;
-      temperature?: number;
-      reasoningEffort?: string;
-    }) => data,
-  )
+  .validator((data: unknown) => mergeOperationSchema.parse(data))
   .handler(async ({ data }) => {
     const text = await callMergeParagraphs({
       text: data.text,
