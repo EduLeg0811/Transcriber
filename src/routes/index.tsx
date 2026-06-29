@@ -567,7 +567,12 @@ function Index() {
           >
             <Tabs
               value={tab}
-              onValueChange={(v) => setTab(v as "file" | "youtube")}
+              onValueChange={(v) => {
+                setTab(v as "file" | "youtube");
+                if (phase.kind === "error") {
+                  setPhase({ kind: "idle" });
+                }
+              }}
               className="w-full"
             >
               <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-3">
@@ -583,7 +588,12 @@ function Index() {
                 {/* Botão Revisor */}
                 <button
                   type="button"
-                  onClick={() => setIsReviewer(!isReviewer)}
+                  onClick={() => {
+                    setIsReviewer(!isReviewer);
+                    if (phase.kind === "error") {
+                      setPhase({ kind: "idle" });
+                    }
+                  }}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
                     isReviewer
                       ? "bg-primary/10 text-primary border-primary/25 hover:bg-primary/20"

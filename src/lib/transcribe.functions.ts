@@ -13,7 +13,7 @@ import {
 //  - vocabulary?: string
 //  - model?: TranscribeModel
 export const transcribeChunkFn = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => {
+  .validator((data: unknown) => {
     if (!(data instanceof FormData)) throw new Error("FormData esperado.");
     const file = data.get("file");
     if (!(file instanceof File)) throw new Error("Arquivo de áudio ausente.");
@@ -31,7 +31,7 @@ export const transcribeChunkFn = createServerFn({ method: "POST" })
   });
 
 export const polishFn = createServerFn({ method: "POST" })
-  .inputValidator(
+  .validator(
     (data: {
       text: string;
       vocabulary?: string;
@@ -52,7 +52,7 @@ export const polishFn = createServerFn({ method: "POST" })
   });
 
 export const youtubeCaptionsFn = createServerFn({ method: "POST" })
-  .inputValidator((data: { url: string }) => data)
+  .validator((data: { url: string }) => data)
   .handler(async ({ data }) => {
     const id = parseYouTubeId(data.url);
     if (!id) {
@@ -78,7 +78,7 @@ export const youtubeCaptionsFn = createServerFn({ method: "POST" })
   });
 
 export const youtubeMetadataFn = createServerFn({ method: "POST" })
-  .inputValidator((data: { url: string }) => data)
+  .validator((data: { url: string }) => data)
   .handler(async ({ data }) => {
     const id = parseYouTubeId(data.url);
     if (!id) return { ok: false as const, reason: "ID não encontrado" };
