@@ -31,7 +31,15 @@ export const transcribeChunkFn = createServerFn({ method: "POST" })
   });
 
 export const polishFn = createServerFn({ method: "POST" })
-  .inputValidator((data: { text: string; vocabulary?: string; model?: string; temperature?: number; reasoningEffort?: string }) => data)
+  .inputValidator(
+    (data: {
+      text: string;
+      vocabulary?: string;
+      model?: string;
+      temperature?: number;
+      reasoningEffort?: string;
+    }) => data,
+  )
   .handler(async ({ data }) => {
     const text = await callPolish({
       text: data.text,
@@ -76,23 +84,28 @@ export const youtubeMetadataFn = createServerFn({ method: "POST" })
     if (!id) return { ok: false as const, reason: "ID não encontrado" };
     const meta = await fetchYouTubeMetadata(id);
     if (!meta) return { ok: false as const, reason: "Metadata não encontrado" };
-    return { ok: true as const, title: meta.title, author: meta.author, thumbnail: `https://img.youtube.com/vi/${id}/mqdefault.jpg` };
+    return {
+      ok: true as const,
+      title: meta.title,
+      author: meta.author,
+      thumbnail: `https://img.youtube.com/vi/${id}/mqdefault.jpg`,
+    };
   });
 
-export const launchLocalConverterFn = createServerFn({ method: "POST" })
-  .handler(async () => {
-    const isProd = process.env.NODE_ENV === "production" || !!process.env.RENDER;
-    if (isProd) {
-      return { 
-        ok: false as const, 
-        reason: "A execução automática só está disponível localmente (localhost). Em produção, use o script python manualmente no seu computador." 
-      };
-    }
-    try {
-      const { exec } = await import("child_process");
-      exec('start powershell -NoExit -Command "python convert_split.py"');
-      return { ok: true as const };
-    } catch (e) {
-      return { ok: false as const, reason: e instanceof Error ? e.message : String(e) };
-    }
-  });
+export const launchLocalConverterFn = createServerFn({ method: "POST" }).handler(async () => {
+  const isProd = process.env.NODE_ENV === "production" || !!process.env.RENDER;
+  if (isProd) {
+    return {
+      ok: false as const,
+      reason:
+        "A execução automática só está disponível localmente (localhost). Em produção, use o script python manualmente no seu computador.",
+    };
+  }
+  try {
+    const { exec } = await import("child_process");
+    exec('start powershell -NoExit -Command "python convert_split.py"');
+    return { ok: true as const };
+  } catch (e) {
+    return { ok: false as const, reason: e instanceof Error ? e.message : String(e) };
+  }
+});

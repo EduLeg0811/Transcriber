@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Play, Pause, Rewind, FastForward, Music2, Film, Youtube } from "lucide-react";
+import {
+  Play,
+  Pause,
+  Rewind,
+  FastForward,
+  Music2,
+  Film,
+  Youtube,
+  ChevronsUpDown,
+} from "lucide-react";
 
 type Segment = { idx: number; text: string; start: number; end: number };
 
@@ -26,11 +35,11 @@ function splitIntoSegments(text: string): { text: string; offset: number }[] {
 function timestamp(s: number): string {
   if (!isFinite(s) || s < 0) s = 0;
   const m = Math.floor(s / 60);
-  const ss = Math.floor(s % 60).toString().padStart(2, "0");
+  const ss = Math.floor(s % 60)
+    .toString()
+    .padStart(2, "0");
   return `${m}:${ss}`;
 }
-
-
 
 function getWords(text: string): Set<string> {
   const words = text.toLowerCase().match(/\w+/g) ?? [];
@@ -50,11 +59,14 @@ function jaccardSimilarity(s1: Set<string>, s2: Set<string>): number {
 function alignAndInterpolate(
   originalSegments: Segment[],
   polishedText: string,
-  duration: number
+  duration: number,
 ): Segment[] {
   const newParts = splitIntoSegments(polishedText);
   if (originalSegments.length === 0) {
-    const totalChars = Math.max(1, newParts.reduce((acc, p) => acc + p.text.length, 0));
+    const totalChars = Math.max(
+      1,
+      newParts.reduce((acc, p) => acc + p.text.length, 0),
+    );
     let acc = 0;
     return newParts.map((p, i) => {
       const start = (acc / totalChars) * duration;
@@ -67,8 +79,8 @@ function alignAndInterpolate(
   const N = originalSegments.length;
   const M = newParts.length;
 
-  const aWords = originalSegments.map(s => getWords(s.text));
-  const bWords = newParts.map(p => getWords(p.text));
+  const aWords = originalSegments.map((s) => getWords(s.text));
+  const bWords = newParts.map((p) => getWords(p.text));
 
   // DP table
   const dp: number[][] = Array.from({ length: N + 1 }, () => Array(M + 1).fill(0));
@@ -169,12 +181,14 @@ export function SyncEditor({
   text,
   initialSegments,
   onChange,
+  isReviewer = false,
 }: {
   file: File | null;
   youtubeUrl?: string | null;
   text: string;
   initialSegments?: Array<{ start: number; end: number; text: string }>;
   onChange: (next: string) => void;
+  isReviewer?: boolean;
 }) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -184,6 +198,7 @@ export function SyncEditor({
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [isVideo, setIsVideo] = useState(false);
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [autoScroll, setAutoScroll] = useState(true);
 
   const prevFileRef = useRef<File | null>(null);
   const prevYtUrlRef = useRef<string | null>(null);
@@ -191,7 +206,10 @@ export function SyncEditor({
   const lastPropsTextRef = useRef("");
 
   useEffect(() => {
-    if (!file) { setMediaUrl(null); return; }
+    if (!file) {
+      setMediaUrl(null);
+      return;
+    }
     const url = URL.createObjectURL(file);
     setMediaUrl(url);
     setIsVideo(file.type.startsWith("video/"));
@@ -219,7 +237,10 @@ export function SyncEditor({
         setSegments(initialSegs);
       } else {
         const parts = splitIntoSegments(text);
-        const totalChars = Math.max(1, parts.reduce((acc, p) => acc + p.text.length, 0));
+        const totalChars = Math.max(
+          1,
+          parts.reduce((acc, p) => acc + p.text.length, 0),
+        );
         let acc = 0;
         const initialSegs = parts.map((p, i) => {
           const start = (acc / totalChars) * duration;
@@ -247,21 +268,25 @@ export function SyncEditor({
 
   // Auto-scroll active segment into view
   useEffect(() => {
-    if (activeIdx < 0 || !containerRef.current) return;
+    if (isReviewer || !autoScroll || activeIdx < 0 || !containerRef.current) return;
     const el = containerRef.current.querySelector<HTMLElement>(`[data-seg="${activeIdx}"]`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [activeIdx]);
+  }, [activeIdx, autoScroll, isReviewer]);
 
   function togglePlay() {
-    const m = mediaRef.current; if (!m) return;
-    if (m.paused) m.play(); else m.pause();
+    const m = mediaRef.current;
+    if (!m) return;
+    if (m.paused) m.play();
+    else m.pause();
   }
   function seekBy(delta: number) {
-    const m = mediaRef.current; if (!m) return;
+    const m = mediaRef.current;
+    if (!m) return;
     m.currentTime = Math.max(0, Math.min(duration, m.currentTime + delta));
   }
   function seekTo(t: number) {
-    const m = mediaRef.current; if (!m) return;
+    const m = mediaRef.current;
+    if (!m) return;
     m.currentTime = Math.max(0, Math.min(duration, t));
     if (m.paused) m.play();
   }
@@ -281,16 +306,26 @@ export function SyncEditor({
       const u = new URL(youtubeUrl);
       if (u.hostname.includes("youtu.be")) return u.pathname.slice(1);
       return u.searchParams.get("v");
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }, [youtubeUrl]);
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(320px,420px)_1fr]">
       {/* Media panel */}
-      <aside className="lg:sticky lg:top-6 lg:self-start">
+      <aside className="lg:sticky lg:top-6 lg:self-start space-y-4">
         <div className="overflow-hidden rounded-xl border border-border bg-background/40">
           <div className="flex items-center gap-2 border-b border-border px-4 py-2.5 text-xs text-muted-foreground">
-            {file ? (isVideo ? <Film className="h-3.5 w-3.5" /> : <Music2 className="h-3.5 w-3.5" />) : <Youtube className="h-3.5 w-3.5" />}
+            {file ? (
+              isVideo ? (
+                <Film className="h-3.5 w-3.5" />
+              ) : (
+                <Music2 className="h-3.5 w-3.5" />
+              )
+            ) : (
+              <Youtube className="h-3.5 w-3.5" />
+            )}
             <span className="truncate">{file?.name ?? youtubeUrl ?? "Mídia"}</span>
           </div>
 
@@ -347,13 +382,24 @@ export function SyncEditor({
                   <span>{timestamp(duration)}</span>
                 </div>
                 <div className="flex items-center justify-center gap-2">
-                  <button onClick={() => seekBy(-5)} className="grid h-9 w-9 place-items-center rounded-full border border-border bg-background/40 text-muted-foreground hover:text-foreground" title="-5s">
+                  <button
+                    onClick={() => seekBy(-5)}
+                    className="grid h-9 w-9 place-items-center rounded-full border border-border bg-background/40 text-muted-foreground hover:text-foreground"
+                    title="-5s"
+                  >
                     <Rewind className="h-4 w-4" />
                   </button>
-                  <button onClick={togglePlay} className="grid h-11 w-11 place-items-center rounded-full bg-primary text-primary-foreground hover:opacity-90">
+                  <button
+                    onClick={togglePlay}
+                    className="grid h-11 w-11 place-items-center rounded-full bg-primary text-primary-foreground hover:opacity-90"
+                  >
                     {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                   </button>
-                  <button onClick={() => seekBy(5)} className="grid h-9 w-9 place-items-center rounded-full border border-border bg-background/40 text-muted-foreground hover:text-foreground" title="+5s">
+                  <button
+                    onClick={() => seekBy(5)}
+                    className="grid h-9 w-9 place-items-center rounded-full border border-border bg-background/40 text-muted-foreground hover:text-foreground"
+                    title="+5s"
+                  >
                     <FastForward className="h-4 w-4" />
                   </button>
                 </div>
@@ -381,24 +427,54 @@ export function SyncEditor({
             </div>
           )}
         </div>
+
+        {/* Card de Controle de rolagem automática */}
+        {!isReviewer && (
+          <div className="rounded-xl border border-border bg-background/40 p-4 flex items-center justify-between shadow-sm">
+            <span className="text-xs font-medium text-muted-foreground flex items-center gap-2 select-none">
+              <ChevronsUpDown className="h-4 w-4 text-muted-foreground/70" />
+              Rolagem automática do texto
+            </span>
+            <button
+              onClick={() => setAutoScroll(!autoScroll)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
+                autoScroll
+                  ? "bg-primary/10 text-primary border-primary/25 hover:bg-primary/20"
+                  : "bg-background/40 text-muted-foreground border-border hover:text-foreground hover:bg-secondary/40"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${autoScroll ? "bg-primary animate-pulse" : "bg-muted-foreground"}`}
+              />
+              {autoScroll ? "Ativada" : "Desativada"}
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Transcript editor */}
-      <div ref={containerRef} className="max-h-[50vh] overflow-y-auto rounded-xl border border-border bg-background/40 p-2">
+      <div
+        ref={containerRef}
+        className="max-h-[50vh] overflow-y-auto rounded-xl border border-border bg-background/40 p-2"
+      >
         <ol className="space-y-1.5">
           {segments.map((seg) => {
-            const isActive = seg.idx === activeIdx && duration > 0;
+            const isActive = !isReviewer && seg.idx === activeIdx && duration > 0;
             return (
               <li
                 key={seg.idx}
                 data-seg={seg.idx}
-                className={`group relative flex gap-3 rounded-lg px-3 py-2 transition-colors ${isActive ? "bg-primary/10 ring-1 ring-primary/40" : "hover:bg-secondary/40"
-                  }`}
+                className={`group relative flex gap-3 rounded-lg px-3 py-2 transition-colors ${
+                  isActive ? "bg-primary/10 ring-1 ring-primary/40" : "hover:bg-secondary/40"
+                }`}
               >
                 <button
                   onClick={() => seekTo(seg.start)}
-                  className={`mt-1 inline-flex h-5 shrink-0 items-center rounded-full px-2 font-mono text-[10px] tabular-nums transition-colors ${isActive ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground group-hover:text-foreground"
-                    }`}
+                  className={`mt-1 inline-flex h-5 shrink-0 items-center rounded-full px-2 font-mono text-[10px] tabular-nums transition-colors ${
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-muted-foreground group-hover:text-foreground"
+                  }`}
                   title="Saltar para este trecho"
                 >
                   {timestamp(seg.start)}

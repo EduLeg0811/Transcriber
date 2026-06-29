@@ -40,11 +40,12 @@ export async function callWhisper(opts: {
   };
   return {
     text: data.text ?? "",
-    segments: data.segments?.map(s => ({
-      start: s.start,
-      end: s.end,
-      text: s.text ?? "",
-    })) ?? [],
+    segments:
+      data.segments?.map((s) => ({
+        start: s.start,
+        end: s.end,
+        text: s.text ?? "",
+      })) ?? [],
   };
 }
 
@@ -159,9 +160,19 @@ export async function fetchYouTubeCaptions(videoId: string): Promise<string | nu
 
   const match = html.match(/"captionTracks":(\[.*?\])/);
   if (!match) return null;
-  let tracks: Array<{ baseUrl: string; languageCode?: string; kind?: string; name?: { simpleText?: string } }>;
+  let tracks: Array<{
+    baseUrl: string;
+    languageCode?: string;
+    kind?: string;
+    name?: { simpleText?: string };
+  }>;
   try {
-    tracks = JSON.parse(match[1].replace(/\\u0026/g, "&").replace(/\\"/g, '"').replace(/\\\//g, "/"));
+    tracks = JSON.parse(
+      match[1]
+        .replace(/\\u0026/g, "&")
+        .replace(/\\"/g, '"')
+        .replace(/\\\//g, "/"),
+    );
   } catch {
     return null;
   }
@@ -189,7 +200,9 @@ export async function fetchYouTubeCaptions(videoId: string): Promise<string | nu
   return out.join(" ").replace(/\s+/g, " ").trim();
 }
 
-export async function fetchYouTubeMetadata(videoId: string): Promise<{ title: string; author: string } | null> {
+export async function fetchYouTubeMetadata(
+  videoId: string,
+): Promise<{ title: string; author: string } | null> {
   try {
     const watch = await fetch(`https://www.youtube.com/watch?v=${videoId}&hl=pt-BR`, {
       headers: {
@@ -200,13 +213,17 @@ export async function fetchYouTubeMetadata(videoId: string): Promise<{ title: st
     });
     if (!watch.ok) return null;
     const html = await watch.text();
-    
-    const titleMatch = html.match(/<meta name="title" content="([^"]+)"/) || html.match(/<title>([^<]+)<\/title>/);
-    const title = titleMatch ? decodeEntities(titleMatch[1]).replace(" - YouTube", "") : "Vídeo do YouTube";
-    
-    const authorMatch = html.match(/<link itemprop="name" content="([^"]+)"/) || html.match(/"author":"([^"]+)"/);
+
+    const titleMatch =
+      html.match(/<meta name="title" content="([^"]+)"/) || html.match(/<title>([^<]+)<\/title>/);
+    const title = titleMatch
+      ? decodeEntities(titleMatch[1]).replace(" - YouTube", "")
+      : "Vídeo do YouTube";
+
+    const authorMatch =
+      html.match(/<link itemprop="name" content="([^"]+)"/) || html.match(/"author":"([^"]+)"/);
     const author = authorMatch ? decodeEntities(authorMatch[1]) : "";
-    
+
     return { title, author };
   } catch {
     return null;

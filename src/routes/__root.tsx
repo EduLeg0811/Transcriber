@@ -78,10 +78,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Transcreve · Áudio e vídeo para texto em PT-BR" },
-      { name: "description", content: "Transcrição precisa de áudio e vídeo em português do Brasil, com vocabulário customizado e polimento por IA." },
+      {
+        name: "description",
+        content:
+          "Transcrição precisa de áudio e vídeo em português do Brasil, com vocabulário customizado e polimento por IA.",
+      },
       { name: "theme-color", content: "#0a0a0c" },
       { property: "og:title", content: "Transcreve" },
-      { property: "og:description", content: "Transcrição de áudio e vídeo em PT-BR com vocabulário customizado." },
+      {
+        property: "og:description",
+        content: "Transcrição de áudio e vídeo em PT-BR com vocabulário customizado.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

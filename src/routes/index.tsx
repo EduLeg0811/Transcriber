@@ -4,8 +4,20 @@ import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence } from "motion/react";
 import { toast, Toaster } from "sonner";
 import {
-  Upload, Youtube, Sparkles, Copy, FileText, FileDown, History,
-  Loader2, CheckCircle2, ChevronDown, X, Wand2, Mic, Film,
+  Upload,
+  Youtube,
+  Sparkles,
+  Copy,
+  FileText,
+  FileDown,
+  History,
+  Loader2,
+  CheckCircle2,
+  ChevronDown,
+  X,
+  Wand2,
+  Mic,
+  Film,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -15,7 +27,13 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import {
   transcribeChunkFn,
@@ -26,9 +44,7 @@ import {
 } from "@/lib/transcribe.functions";
 import { splitMediaIntoAudioChunks } from "@/lib/audio-split";
 import { buildTranscriptDocx, downloadBlob } from "@/lib/docx-export";
-import {
-  loadVocabulary, saveVocabulary, saveHistoryItem,
-} from "@/lib/history";
+import { loadVocabulary, saveVocabulary, saveHistoryItem } from "@/lib/history";
 import { SyncEditor } from "@/components/SyncEditor";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -36,9 +52,17 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Transcreve áudio e vídeo para texto em PT-BR" },
-      { name: "description", content: "Transcrição precisa de áudio e vídeo em português do Brasil, com vocabulário customizado e polimento por IA." },
+      {
+        name: "description",
+        content:
+          "Transcrição precisa de áudio e vídeo em português do Brasil, com vocabulário customizado e polimento por IA.",
+      },
       { property: "og:title", content: "Transcreve" },
-      { property: "og:description", content: "Transcrição de áudio e vídeo em PT-BR com vocabulário customizado da Conscienciologia." },
+      {
+        property: "og:description",
+        content:
+          "Transcrição de áudio e vídeo em PT-BR com vocabulário customizado da Conscienciologia.",
+      },
     ],
   }),
   component: Index,
@@ -81,7 +105,9 @@ function getMediaDuration(file: File): Promise<number> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve(0);
     const url = URL.createObjectURL(file);
-    const media = file.type.startsWith("video/") ? document.createElement("video") : document.createElement("audio");
+    const media = file.type.startsWith("video/")
+      ? document.createElement("video")
+      : document.createElement("audio");
     media.src = url;
     media.preload = "metadata";
     media.onloadedmetadata = () => {
@@ -118,7 +144,8 @@ function Index() {
   const [ytUrl, setYtUrl] = useState("");
   const [vocab, setVocab] = useState("");
   const [model, setModel] = useState<(typeof MODELS)[number]["value"]>("gpt-4o-mini-transcribe");
-  const [polishModel, setPolishModel] = useState<(typeof POLISH_MODELS)[number]["value"]>("gpt-5.4-mini");
+  const [polishModel, setPolishModel] =
+    useState<(typeof POLISH_MODELS)[number]["value"]>("gpt-5.4-mini");
   const [temperature, setTemperature] = useState<number>(0.3);
   const [reasoningEffort, setReasoningEffort] = useState<string>("low");
   const [isPolishingResult, setIsPolishingResult] = useState(false);
@@ -138,14 +165,26 @@ function Index() {
   const [limitMinutes, setLimitMinutes] = useState("5");
 
   const [fileDuration, setFileDuration] = useState<number | null>(null);
-  const [ytMetadata, setYtMetadata] = useState<{ title: string; author: string; thumbnail: string } | null>(null);
+  const [ytMetadata, setYtMetadata] = useState<{
+    title: string;
+    author: string;
+    thumbnail: string;
+  } | null>(null);
+
+  const [isReviewer, setIsReviewer] = useState(false);
+  const [reviewText, setReviewText] = useState("");
+  const [reviewTextFile, setReviewTextFile] = useState<File | null>(null);
 
   const transcribeChunk = useServerFn(transcribeChunkFn);
   const polishCall = useServerFn(polishFn);
   const fetchYTCaptions = useServerFn(youtubeCaptionsFn);
 
-  useEffect(() => { setVocab(loadVocabulary()); }, []);
-  useEffect(() => { saveVocabulary(vocab); }, [vocab]);
+  useEffect(() => {
+    setVocab(loadVocabulary());
+  }, []);
+  useEffect(() => {
+    saveVocabulary(vocab);
+  }, [vocab]);
 
   useEffect(() => {
     if (!file) {
@@ -190,15 +229,21 @@ function Index() {
   const busy = phase.kind !== "idle" && phase.kind !== "done" && phase.kind !== "error";
 
   const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); setDragOver(false);
+    e.preventDefault();
+    setDragOver(false);
     const f = e.dataTransfer.files?.[0];
     if (f) setFile(f);
   }, []);
 
   async function runFile() {
-    if (!file) { toast.error("Selecione um arquivo primeiro."); return; }
+    if (!file) {
+      toast.error("Selecione um arquivo primeiro.");
+      return;
+    }
     if (file.size > 200 * 1024 * 1024) {
-      const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+      const isLocal =
+        typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
       if (isLocal) {
         toast.warning("Vídeo muito grande! Risco de erro de memória no navegador.", {
           duration: 15000,
@@ -208,18 +253,23 @@ function Index() {
               try {
                 const res = await launchLocalConverterFn();
                 if (res.ok) {
-                  toast.success("PowerShell aberto! Coloque o vídeo na pasta e siga as instruções.");
+                  toast.success(
+                    "PowerShell aberto! Coloque o vídeo na pasta e siga as instruções.",
+                  );
                 } else {
                   toast.error(res.reason);
                 }
               } catch (e) {
                 toast.error("Não foi possível acionar o PowerShell automaticamente.");
               }
-            }
-          }
+            },
+          },
         });
       } else {
-        toast.warning("Vídeo muito grande! Risco de erro de memória no navegador. Recomendamos extrair o áudio (.mp3) localmente antes do envio.", { duration: 12000 });
+        toast.warning(
+          "Vídeo muito grande! Risco de erro de memória no navegador. Recomendamos extrair o áudio (.mp3) localmente antes do envio.",
+          { duration: 12000 },
+        );
       }
     }
     const started = performance.now();
@@ -239,9 +289,14 @@ function Index() {
         }
       }
       setPhase({ kind: "splitting", message: "Preparando áudio…" });
-      const chunks = await splitMediaIntoAudioChunks(file, ({ message }) => {
-        if (message) setPhase({ kind: "splitting", message });
-      }, segmentSeconds, maxSeconds);
+      const chunks = await splitMediaIntoAudioChunks(
+        file,
+        ({ message }) => {
+          if (message) setPhase({ kind: "splitting", message });
+        },
+        segmentSeconds,
+        maxSeconds,
+      );
 
       const texts: string[] = [];
       const allSegments: Array<{ start: number; end: number; text: string }> = [];
@@ -274,10 +329,13 @@ function Index() {
           const sentences = text
             .replace(/\r\n/g, "\n")
             .split(/(?<=[.!?])\s+|\n+/)
-            .map(s => s.trim())
+            .map((s) => s.trim())
             .filter(Boolean);
           if (sentences.length > 0) {
-            const totalChars = Math.max(1, sentences.reduce((acc, s) => acc + s.length, 0));
+            const totalChars = Math.max(
+              1,
+              sentences.reduce((acc, s) => acc + s.length, 0),
+            );
             let acc = 0;
             for (const s of sentences) {
               const start = (acc / totalChars) * currentChunkDuration;
@@ -304,9 +362,14 @@ function Index() {
         initialSegments: allSegments,
       });
       saveHistoryItem({
-        id: crypto.randomUUID(), createdAt: Date.now(),
-        source: file.name, kind: "file", text: full,
-        polished: false, model, durationMs,
+        id: crypto.randomUUID(),
+        createdAt: Date.now(),
+        source: file.name,
+        kind: "file",
+        text: full,
+        polished: false,
+        model,
+        durationMs,
         initialSegments: allSegments,
       });
       setPhase({ kind: "done" });
@@ -319,7 +382,10 @@ function Index() {
   }
 
   async function runYoutube() {
-    if (!ytUrl.trim()) { toast.error("Cole o link do YouTube."); return; }
+    if (!ytUrl.trim()) {
+      toast.error("Cole o link do YouTube.");
+      return;
+    }
     const started = performance.now();
     setResult(null);
     setHasPolished(false);
@@ -335,12 +401,81 @@ function Index() {
       const durationMs = Math.round(performance.now() - started);
       setResult({ text: full, sourceLabel: ytUrl.trim(), kind: "youtube", durationMs });
       saveHistoryItem({
-        id: crypto.randomUUID(), createdAt: Date.now(),
-        source: ytUrl.trim(), kind: "youtube", text: full,
-        polished: false, model: "youtube-captions", durationMs,
+        id: crypto.randomUUID(),
+        createdAt: Date.now(),
+        source: ytUrl.trim(),
+        kind: "youtube",
+        text: full,
+        polished: false,
+        model: "youtube-captions",
+        durationMs,
       });
       setPhase({ kind: "done" });
       toast.success("Legenda capturada.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setPhase({ kind: "error", message: msg });
+      toast.error(msg);
+    }
+  }
+
+  async function runReview() {
+    if (!file) {
+      toast.error("Selecione um arquivo de mídia primeiro.");
+      return;
+    }
+    if (!reviewText.trim()) {
+      toast.error("Selecione um arquivo de texto (.txt) para revisar.");
+      return;
+    }
+    const started = performance.now();
+    setResult(null);
+    setHasPolished(false);
+    try {
+      setPhase({ kind: "splitting", message: "Carregando arquivos de revisão…" });
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      const durationMs = Math.round(performance.now() - started);
+      setResult({
+        text: reviewText,
+        sourceLabel: file.name,
+        kind: "file",
+        durationMs,
+        initialSegments: [],
+      });
+      setPhase({ kind: "done" });
+      toast.success("Pronto para revisão.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setPhase({ kind: "error", message: msg });
+      toast.error(msg);
+    }
+  }
+
+  async function runReviewYoutube() {
+    if (!ytUrl.trim()) {
+      toast.error("Cole o link do YouTube.");
+      return;
+    }
+    if (!reviewText.trim()) {
+      toast.error("Selecione um arquivo de texto (.txt) para revisar.");
+      return;
+    }
+    const started = performance.now();
+    setResult(null);
+    setHasPolished(false);
+    try {
+      setPhase({ kind: "fetching-captions" });
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      const durationMs = Math.round(performance.now() - started);
+      setResult({
+        text: reviewText,
+        sourceLabel: ytUrl.trim(),
+        kind: "youtube",
+        durationMs,
+        initialSegments: [],
+      });
+      setPhase({ kind: "done" });
+      toast.success("Pronto para revisão.");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setPhase({ kind: "error", message: msg });
@@ -409,7 +544,9 @@ function Index() {
               <span className="italic text-primary text-8xl">Fala,</span>
 
               <br />
-              <span className="font-serif text-xl tracking-tight text-xl md:text-6xl">que eu te escrevo.</span>
+              <span className="font-serif text-xl tracking-tight text-xl md:text-6xl">
+                que eu transcrevo.
+              </span>
             </h1>
             {/* <p className="mx-auto mt-5 max-w-xl text-pretty text-muted-foreground">
               Transcrição precisa para conferências, palestras e estudos da Conscienciologia — com jargões reconhecidos automaticamente.
@@ -419,7 +556,6 @@ function Index() {
               <Sparkles className="h-3.5 w-3.5 text-primary" />
               Escriba AI · Neologismos da Conscienciologia
             </div> */}
-
           </motion.div>
 
           {/* Card */}
@@ -429,7 +565,11 @@ function Index() {
             transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
             className="mt-12 overflow-hidden rounded-2xl border border-border bg-card/60 shadow-2xl shadow-black/40 backdrop-blur-xl"
           >
-            <Tabs value={tab} onValueChange={(v) => setTab(v as "file" | "youtube")} className="w-full">
+            <Tabs
+              value={tab}
+              onValueChange={(v) => setTab(v as "file" | "youtube")}
+              className="w-full"
+            >
               <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-3">
                 <TabsList className="bg-transparent p-0">
                   <TabsTrigger value="file" className="gap-2 data-[state=active]:bg-secondary">
@@ -439,6 +579,22 @@ function Index() {
                     <Youtube className="h-4 w-4" /> YouTube
                   </TabsTrigger>
                 </TabsList>
+
+                {/* Botão Revisor */}
+                <button
+                  type="button"
+                  onClick={() => setIsReviewer(!isReviewer)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
+                    isReviewer
+                      ? "bg-primary/10 text-primary border-primary/25 hover:bg-primary/20"
+                      : "bg-background/40 text-muted-foreground border-border hover:text-foreground hover:bg-secondary/40"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${isReviewer ? "bg-primary animate-pulse" : "bg-muted-foreground"}`}
+                  />
+                  Revisor
+                </button>
               </div>
 
               <TabsContent value="file" className="m-0 p-5">
@@ -447,14 +603,24 @@ function Index() {
                     {/* File Details (Left) */}
                     <div className="flex-1 flex items-center gap-3 min-w-0 w-full rounded-xl border border-border bg-secondary/10 p-2.5">
                       <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/25">
-                        {file.type.startsWith("video/") ? <Film className="h-4.5 w-4.5" /> : <Mic className="h-4.5 w-4.5" />}
+                        {file.type.startsWith("video/") ? (
+                          <Film className="h-4.5 w-4.5" />
+                        ) : (
+                          <Mic className="h-4.5 w-4.5" />
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="truncate font-medium text-xs text-foreground/90">{file.name}</p>
+                          <p className="truncate font-medium text-xs text-foreground/90">
+                            {file.name}
+                          </p>
                           <button
                             type="button"
-                            onClick={() => setFile(null)}
+                            onClick={() => {
+                              setFile(null);
+                              setReviewTextFile(null);
+                              setReviewText("");
+                            }}
                             className="rounded-full p-1 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors shrink-0"
                           >
                             <X className="h-3.5 w-3.5" />
@@ -467,7 +633,9 @@ function Index() {
                           {fileDuration !== null && (
                             <>
                               <span>•</span>
-                              <span className="text-primary font-medium">{formatDuration(fileDuration * 1000)}</span>
+                              <span className="text-primary font-medium">
+                                {formatDuration(fileDuration * 1000)}
+                              </span>
                             </>
                           )}
                         </div>
@@ -475,56 +643,96 @@ function Index() {
                     </div>
 
                     {/* Limit Transcription (Middle-Left) */}
-                    <div className="shrink-0 flex items-center gap-2 rounded-xl border border-border bg-secondary/15 px-3 h-[50px] w-full lg:w-auto">
-                      <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground select-none">
-                        <Switch
-                          checked={limitEnabled}
-                          onCheckedChange={setLimitEnabled}
-                          className="scale-75"
-                        />
-                        <span>Limitar:</span>
-                      </label>
-                      {limitEnabled ? (
-                        <div className="flex items-center gap-1">
-                          <Input
-                            type="number"
-                            min={1}
-                            max={Math.ceil((fileDuration || 0) / 60) || 120}
-                            value={limitMinutes}
-                            onChange={(e) => setLimitMinutes(e.target.value)}
-                            className="h-6 w-12 text-center text-xs p-0 border-border bg-background/50 focus:ring-0 focus-visible:ring-0"
+                    {!isReviewer && (
+                      <div className="shrink-0 flex items-center gap-2 rounded-xl border border-border bg-secondary/15 px-3 h-[50px] w-full lg:w-auto">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground select-none">
+                          <Switch
+                            checked={limitEnabled}
+                            onCheckedChange={setLimitEnabled}
+                            className="scale-75"
                           />
-                          <span className="text-[10px] text-muted-foreground">min</span>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground italic">Inteiro</span>
-                      )}
-                    </div>
+                          <span>Limitar:</span>
+                        </label>
+                        {limitEnabled ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              min={1}
+                              max={Math.ceil((fileDuration || 0) / 60) || 120}
+                              value={limitMinutes}
+                              onChange={(e) => setLimitMinutes(e.target.value)}
+                              className="h-6 w-12 text-center text-xs p-0 border-border bg-background/50 focus:ring-0 focus-visible:ring-0"
+                            />
+                            <span className="text-[10px] text-muted-foreground">min</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground italic">Inteiro</span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Model Selector (Middle-Right) */}
-                    <div className="w-full lg:w-[220px] shrink-0">
-                      <Select value={model} onValueChange={(v) => setModel(v as typeof model)} disabled={busy}>
-                        <SelectTrigger className="h-[50px] w-full border-border bg-background/40 text-xs">
-                          <SelectValue placeholder="Modelo de transcrição" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {MODELS.map((m) => (
-                            <SelectItem key={m.value} value={m.value} className="text-xs">{m.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {!isReviewer && (
+                      <div className="w-full lg:w-[220px] shrink-0">
+                        <Select
+                          value={model}
+                          onValueChange={(v) => setModel(v as typeof model)}
+                          disabled={busy}
+                        >
+                          <SelectTrigger className="h-[50px] w-full border-border bg-background/40 text-xs">
+                            <SelectValue placeholder="Modelo de transcrição" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MODELS.map((m) => (
+                              <SelectItem key={m.value} value={m.value} className="text-xs">
+                                {m.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
-                    {/* Transcribe Button (Right) */}
+                    {/* Seleção do Texto Existente (Somente Revisor) */}
+                    {isReviewer && (
+                      <label className="flex-1 flex items-center justify-center gap-2 h-[50px] cursor-pointer rounded-xl border border-dashed border-border hover:border-primary/40 hover:bg-secondary/10 px-4 text-center transition-all w-full lg:w-auto">
+                        <input
+                          type="file"
+                          accept=".txt"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              setReviewTextFile(f);
+                              const r = new FileReader();
+                              r.onload = (ev) => {
+                                setReviewText((ev.target?.result as string) || "");
+                              };
+                              r.readAsText(f);
+                            }
+                          }}
+                        />
+                        <FileText className="h-4 w-4 text-primary shrink-0" />
+                        <span className="text-xs font-medium text-muted-foreground truncate">
+                          {reviewTextFile ? reviewTextFile.name : "Carregar texto (.txt)"}
+                        </span>
+                      </label>
+                    )}
+
+                    {/* Action Button (Right) */}
                     <div className="w-full lg:w-[130px] shrink-0">
                       <Button
                         size="lg"
-                        onClick={runFile}
+                        onClick={isReviewer ? runReview : runFile}
                         disabled={busy}
                         className="h-[50px] w-full text-xs font-medium"
                       >
-                        {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-                        Transcrever
+                        {busy ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        {isReviewer ? "Revisar" : "Transcrever"}
                       </Button>
                     </div>
                   </div>
@@ -532,7 +740,10 @@ function Index() {
                   <div className="flex flex-col lg:flex-row items-center gap-3">
                     {/* Compact Upload Box */}
                     <label
-                      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragOver(true);
+                      }}
                       onDragLeave={() => setDragOver(false)}
                       onDrop={onDrop}
                       className={`flex-1 flex items-center justify-center gap-3 h-12 w-full cursor-pointer rounded-xl border border-dashed px-4 text-center transition-all ${dragOver ? "border-primary/60 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-secondary/30"}`}
@@ -544,80 +755,113 @@ function Index() {
                         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                       />
                       <Upload className="h-4 w-4 text-primary shrink-0" />
-                      <span className="text-xs font-medium truncate text-muted-foreground">Arraste ou clique para selecionar áudio/vídeo</span>
+                      <span className="text-xs font-medium truncate text-muted-foreground">
+                        Arraste ou clique para selecionar áudio/vídeo
+                      </span>
                     </label>
 
                     {/* Model Selector */}
-                    <div className="w-full lg:w-[260px] shrink-0">
-                      <Select value={model} onValueChange={(v) => setModel(v as typeof model)} disabled={busy}>
-                        <SelectTrigger className="h-12 w-full border-border bg-background/40 text-xs">
-                          <SelectValue placeholder="Modelo de transcrição" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {MODELS.map((m) => (
-                            <SelectItem key={m.value} value={m.value} className="text-xs">{m.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {!isReviewer && (
+                      <div className="w-full lg:w-[260px] shrink-0">
+                        <Select
+                          value={model}
+                          onValueChange={(v) => setModel(v as typeof model)}
+                          disabled={busy}
+                        >
+                          <SelectTrigger className="h-12 w-full border-border bg-background/40 text-xs">
+                            <SelectValue placeholder="Modelo de transcrição" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MODELS.map((m) => (
+                              <SelectItem key={m.value} value={m.value} className="text-xs">
+                                {m.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
-                    {/* Transcribe Button */}
+                    {/* Action Button */}
                     <div className="w-full lg:w-[150px] shrink-0">
                       <Button
                         size="lg"
-                        onClick={runFile}
+                        onClick={isReviewer ? runReview : runFile}
                         disabled={busy || !file}
                         className="h-12 w-full text-xs font-medium"
                       >
-                        {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-                        Transcrever
+                        {busy ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        {isReviewer ? "Revisar" : "Transcrever"}
                       </Button>
                     </div>
                   </div>
                 )}
-                
+
                 <Collapsible className="mt-3 text-left">
                   <CollapsibleTrigger className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors select-none">
-                    <span>💡 Arquivo muito grande ou lento? Clique aqui para ver como preparar o áudio localmente</span>
+                    <span>
+                      💡 Arquivo muito grande ou lento? Clique aqui para ver como preparar o áudio
+                      localmente
+                    </span>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="mt-1.5 rounded-lg border border-border/30 bg-secondary/5 p-3 text-[11px] text-muted-foreground space-y-1.5 leading-relaxed">
                     <p>
-                      Para arquivos ou vídeos muito grandes, você pode extrair apenas o áudio em segundos no seu computador. Isso economiza internet e tempo de processamento.
+                      Para arquivos ou vídeos muito grandes, você pode extrair apenas o áudio em
+                      segundos no seu computador. Isso economiza internet e tempo de processamento.
                     </p>
                     <p>
-                      <strong>Com FFmpeg (via Terminal/Prompt):</strong> Abra a pasta do arquivo e execute o comando:
+                      <strong>Com FFmpeg (via Terminal/Prompt):</strong> Abra a pasta do arquivo e
+                      execute o comando:
                     </p>
                     <pre className="bg-background/80 p-2 rounded border border-border/40 font-mono text-[9px] text-foreground select-all overflow-x-auto">
                       ffmpeg -i seu-video.mp4 -vn -ac 1 -ar 16000 -b:a 64k audio.mp3
                     </pre>
                     <p>
-                      <strong>Outra opção:</strong> Você também pode usar ferramentas online gratuitas como o <a href="https://cobalt.tools" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">cobalt.tools</a> ou Audacity para salvar apenas a faixa de áudio.
+                      <strong>Outra opção:</strong> Você também pode usar ferramentas online
+                      gratuitas como o{" "}
+                      <a
+                        href="https://cobalt.tools"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline font-medium"
+                      >
+                        cobalt.tools
+                      </a>{" "}
+                      ou Audacity para salvar apenas a faixa de áudio.
                     </p>
-                    {typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") && (
-                      <div className="pt-2 border-t border-border/20 flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-[10px] px-2.5 font-medium border-border hover:bg-secondary/50 text-foreground gap-1"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            try {
-                              const res = await launchLocalConverterFn();
-                              if (res.ok) {
-                                toast.success("PowerShell aberto!");
-                              } else {
-                                toast.error(res.reason);
+                    {typeof window !== "undefined" &&
+                      (window.location.hostname === "localhost" ||
+                        window.location.hostname === "127.0.0.1") && (
+                        <div className="pt-2 border-t border-border/20 flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[10px] px-2.5 font-medium border-border hover:bg-secondary/50 text-foreground gap-1"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                const res = await launchLocalConverterFn();
+                                if (res.ok) {
+                                  toast.success("PowerShell aberto!");
+                                } else {
+                                  toast.error(res.reason);
+                                }
+                              } catch (err) {
+                                toast.error(
+                                  "Não foi possível acionar o PowerShell automaticamente.",
+                                );
                               }
-                            } catch (err) {
-                              toast.error("Não foi possível acionar o PowerShell automaticamente.");
-                            }
-                          }}
-                        >
-                          🚀 Abrir Conversor Automático (PowerShell)
-                        </Button>
-                      </div>
-                    )}
+                            }}
+                          >
+                            🚀 Abrir Conversor Automático (PowerShell)
+                          </Button>
+                        </div>
+                      )}
                   </CollapsibleContent>
                 </Collapsible>
               </TabsContent>
@@ -634,29 +878,67 @@ function Index() {
                   </div>
 
                   {/* Model Selector */}
-                  <div className="w-full lg:w-[260px] shrink-0">
-                    <Select value={model} onValueChange={(v) => setModel(v as typeof model)} disabled={busy}>
-                      <SelectTrigger className="h-12 w-full border-border bg-background/40 text-xs">
-                        <SelectValue placeholder="Modelo de transcrição" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {MODELS.map((m) => (
-                          <SelectItem key={m.value} value={m.value} className="text-xs">{m.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {!isReviewer && (
+                    <div className="w-full lg:w-[260px] shrink-0">
+                      <Select
+                        value={model}
+                        onValueChange={(v) => setModel(v as typeof model)}
+                        disabled={busy}
+                      >
+                        <SelectTrigger className="h-12 w-full border-border bg-background/40 text-xs">
+                          <SelectValue placeholder="Modelo de transcrição" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MODELS.map((m) => (
+                            <SelectItem key={m.value} value={m.value} className="text-xs">
+                              {m.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
-                  {/* Transcribe Button */}
+                  {/* Seleção do Texto Existente (Somente Revisor) */}
+                  {isReviewer && (
+                    <label className="w-full lg:w-[260px] shrink-0 flex items-center justify-center gap-2 h-12 cursor-pointer rounded-xl border border-dashed border-border hover:border-primary/40 hover:bg-secondary/10 px-4 text-center transition-all">
+                      <input
+                        type="file"
+                        accept=".txt"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) {
+                            setReviewTextFile(f);
+                            const r = new FileReader();
+                            r.onload = (ev) => {
+                              setReviewText((ev.target?.result as string) || "");
+                            };
+                            r.readAsText(f);
+                          }
+                        }}
+                      />
+                      <FileText className="h-4 w-4 text-primary shrink-0" />
+                      <span className="text-xs font-medium text-muted-foreground truncate">
+                        {reviewTextFile ? reviewTextFile.name : "Carregar texto (.txt)"}
+                      </span>
+                    </label>
+                  )}
+
+                  {/* Action Button */}
                   <div className="w-full lg:w-[150px] shrink-0">
                     <Button
                       size="lg"
-                      onClick={runYoutube}
+                      onClick={isReviewer ? runReviewYoutube : runYoutube}
                       disabled={busy || !ytUrl.trim()}
                       className="h-12 w-full text-xs font-medium"
                     >
-                      {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-                      Transcrever
+                      {busy ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      {isReviewer ? "Revisar" : "Transcrever"}
                     </Button>
                   </div>
                 </div>
@@ -692,14 +974,17 @@ function Index() {
                         </button>
                       </div>
                       {ytMetadata.author && (
-                        <p className="text-xs text-muted-foreground truncate">{ytMetadata.author}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {ytMetadata.author}
+                        </p>
                       )}
                     </div>
                   </motion.div>
                 )}
 
                 <p className="text-xs text-muted-foreground">
-                  Tenta primeiro as legendas oficiais. Vídeos sem legenda exigem download manual do áudio (cobalt.tools) e upload pela aba Arquivo.
+                  Tenta primeiro as legendas oficiais. Vídeos sem legenda exigem download manual do
+                  áudio (cobalt.tools) e upload pela aba Arquivo.
                 </p>
               </TabsContent>
             </Tabs>
@@ -719,8 +1004,6 @@ function Index() {
           </motion.section>
         </div>
 
-
-
         {/* Result */}
         <AnimatePresence>
           {result && (
@@ -734,60 +1017,106 @@ function Index() {
                 <div className="flex items-center gap-2 text-sm">
                   <CheckCircle2 className="h-4 w-4 text-primary" />
                   <span className="font-medium">Transcrição</span>
-                  <span className="text-muted-foreground">· {formatDuration(result.durationMs)}</span>
+                  <span className="text-muted-foreground">
+                    · {formatDuration(result.durationMs)}
+                  </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-border bg-background/20 px-3 py-1 mr-2">
-                    <Select value={polishModel} onValueChange={(v) => setPolishModel(v as typeof polishModel)} disabled={isPolishingResult}>
-                      <SelectTrigger className="h-7 w-[100px] border-none bg-transparent text-xs py-0 focus:ring-0 shadow-none">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {POLISH_MODELS.map((pm) => (
-                          <SelectItem key={pm.value} value={pm.value} className="text-xs">{pm.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="h-4 w-px bg-border" />
-                    <Select value={String(temperature)} onValueChange={(v) => setTemperature(parseFloat(v))} disabled={isPolishingResult}>
-                      <SelectTrigger className="h-7 w-[75px] border-none bg-transparent text-xs py-0 focus:ring-0 shadow-none">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TEMPERATURE_OPTIONS.map((to) => (
-                          <SelectItem key={to.value} value={to.value} className="text-xs">{to.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="h-4 w-px bg-border" />
-                    <Select value={reasoningEffort} onValueChange={setReasoningEffort} disabled={isPolishingResult}>
-                      <SelectTrigger className="h-7 w-[100px] border-none bg-transparent text-xs py-0 focus:ring-0 shadow-none">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {REASONING_EFFORT_OPTIONS.map((re) => (
-                          <SelectItem key={re.value} value={re.value} className="text-xs">{re.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  {!isReviewer ? (
+                    <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-border bg-background/20 px-3 py-1 mr-2">
+                      <Select
+                        value={polishModel}
+                        onValueChange={(v) => setPolishModel(v as typeof polishModel)}
+                        disabled={isPolishingResult}
+                      >
+                        <SelectTrigger className="h-7 w-[100px] border-none bg-transparent text-xs py-0 focus:ring-0 shadow-none">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {POLISH_MODELS.map((pm) => (
+                            <SelectItem key={pm.value} value={pm.value} className="text-xs">
+                              {pm.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="h-4 w-px bg-border" />
+                      <Select
+                        value={String(temperature)}
+                        onValueChange={(v) => setTemperature(parseFloat(v))}
+                        disabled={isPolishingResult}
+                      >
+                        <SelectTrigger className="h-7 w-[75px] border-none bg-transparent text-xs py-0 focus:ring-0 shadow-none">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TEMPERATURE_OPTIONS.map((to) => (
+                            <SelectItem key={to.value} value={to.value} className="text-xs">
+                              {to.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="h-4 w-px bg-border" />
+                      <Select
+                        value={reasoningEffort}
+                        onValueChange={setReasoningEffort}
+                        disabled={isPolishingResult}
+                      >
+                        <SelectTrigger className="h-7 w-[100px] border-none bg-transparent text-xs py-0 focus:ring-0 shadow-none">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {REASONING_EFFORT_OPTIONS.map((re) => (
+                            <SelectItem key={re.value} value={re.value} className="text-xs">
+                              {re.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <button
+                        onClick={runPostPolish}
+                        disabled={isPolishingResult || !result.text}
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                          hasPolished
+                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
+                            : "bg-primary/10 text-primary hover:bg-primary/20"
+                        }`}
+                      >
+                        {isPolishingResult ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Wand2 className="h-3 w-3" />
+                        )}
+                        Polir com IA
+                      </button>
+                    </div>
+                  ) : (
                     <button
                       onClick={runPostPolish}
                       disabled={isPolishingResult || !result.text}
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${hasPolished
-                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
-                        : "bg-primary/10 text-primary hover:bg-primary/20"
-                        }`}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 border border-border mr-2 ${
+                        hasPolished
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-500/30 hover:bg-blue-200 dark:hover:bg-blue-900/60"
+                          : "bg-background/40 text-foreground/90 hover:text-primary hover:border-primary/40 hover:bg-secondary/40"
+                      }`}
                     >
                       {isPolishingResult ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <Wand2 className="h-3 w-3" />
+                        <Wand2 className="h-3.5 w-3.5" />
                       )}
                       Polir com IA
                     </button>
-                  </div>
+                  )}
 
-                  <ActionButton onClick={() => { navigator.clipboard.writeText(result.text); toast.success("Copiado."); }} icon={<Copy className="h-3.5 w-3.5" />}>
+                  <ActionButton
+                    onClick={() => {
+                      navigator.clipboard.writeText(result.text);
+                      toast.success("Copiado.");
+                    }}
+                    icon={<Copy className="h-3.5 w-3.5" />}
+                  >
                     Copiar
                   </ActionButton>
                   <ActionButton
@@ -818,8 +1147,11 @@ function Index() {
                 <Collapsible open={vocabOpen} onOpenChange={setVocabOpen}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <CollapsibleTrigger className="group inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground">
-                      <ChevronDown className={`h-3 w-3 transition-transform ${vocabOpen ? "rotate-180" : ""}`} />
-                      Vocabulário customizado {vocab.trim() && <span className="text-primary">· ativo</span>}
+                      <ChevronDown
+                        className={`h-3 w-3 transition-transform ${vocabOpen ? "rotate-180" : ""}`}
+                      />
+                      Vocabulário customizado{" "}
+                      {vocab.trim() && <span className="text-primary">· ativo</span>}
                     </CollapsibleTrigger>
                   </div>
                   <CollapsibleContent className="pt-3">
@@ -831,7 +1163,8 @@ function Index() {
                       className="resize-none border-border bg-background/40 text-xs"
                     />
                     <p className="mt-2 text-[10px] text-muted-foreground">
-                      Termos enviados como dica ao modelo de polimento (até ~900 caracteres). Salvo localmente neste dispositivo.
+                      Termos enviados como dica ao modelo de polimento (até ~900 caracteres). Salvo
+                      localmente neste dispositivo.
                     </p>
                   </CollapsibleContent>
                 </Collapsible>
@@ -843,6 +1176,7 @@ function Index() {
                   text={result.text}
                   initialSegments={result.initialSegments}
                   onChange={(next) => setResult((r) => (r ? { ...r, text: next } : r))}
+                  isReviewer={isReviewer}
                 />
               </div>
             </motion.section>
@@ -850,9 +1184,7 @@ function Index() {
         </AnimatePresence>
 
         {/* Footer note */}
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          @2026  ●  Cons-IA
-        </p>
+        <p className="mt-4 text-center text-xs text-muted-foreground">@2026 ● Cons-IA</p>
       </main>
     </div>
   );
@@ -863,15 +1195,23 @@ function PhaseLine({ phase }: { phase: Phase }) {
   let value: number | null = null;
   switch (phase.kind) {
     case "splitting":
-      label = phase.message ?? "Preparando…"; break;
+      label = phase.message ?? "Preparando…";
+      break;
     case "transcribing":
       label = `Transcrevendo ${phase.current}/${phase.total}…`;
-      value = (phase.current - 1) / phase.total * 100;
+      value = ((phase.current - 1) / phase.total) * 100;
       break;
-    case "polishing": label = "Polindo com IA…"; break;
-    case "fetching-captions": label = "Buscando legendas do YouTube…"; break;
-    case "error": label = phase.message; break;
-    default: break;
+    case "polishing":
+      label = "Polindo com IA…";
+      break;
+    case "fetching-captions":
+      label = "Buscando legendas do YouTube…";
+      break;
+    case "error":
+      label = phase.message;
+      break;
+    default:
+      break;
   }
   return (
     <div className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -886,8 +1226,14 @@ function PhaseLine({ phase }: { phase: Phase }) {
 }
 
 function ActionButton({
-  children, onClick, icon,
-}: { children: React.ReactNode; onClick: () => void; icon: React.ReactNode }) {
+  children,
+  onClick,
+  icon,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  icon: React.ReactNode;
+}) {
   return (
     <button
       onClick={onClick}
@@ -902,6 +1248,7 @@ function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const s = Math.round(ms / 1000);
   if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60); const rs = s % 60;
+  const m = Math.floor(s / 60);
+  const rs = s % 60;
   return `${m}m ${rs}s`;
 }

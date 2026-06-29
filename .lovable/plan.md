@@ -8,8 +8,8 @@ Dois modelos que você citou **não existem com esse nome exato** na API da Open
   - `gpt-4o-mini-transcribe` (rápido, barato — **vou usar como padrão**)
   - `gpt-4o-transcribe` (mais preciso, opcional via toggle)
   - `whisper-1` (legado)
-  
-  *Whisper-large-v3-turbo open-source só existe via Groq/self-host. Se quiser esse exato, precisa de outra chave (Groq).*
+
+  _Whisper-large-v3-turbo open-source só existe via Groq/self-host. Se quiser esse exato, precisa de outra chave (Groq)._
 
 - **"GPT-5.4-mini"** → não existe. Vou usar **`gpt-5-mini`** (modelo mini mais recente da OpenAI) para o polimento. Se preferir `gpt-4o-mini` ou `gpt-4.1-mini`, me diga.
 
@@ -60,7 +60,7 @@ Vou implementar e testar; se YouTube bloquear consistentemente, documento isso n
 Profissional, moderno, sofisticado:
 
 - **Tema escuro** (com toggle light opcional)
-- **Tipografia**: 
+- **Tipografia**:
   - Display: **Instrument Serif** (elegante, editorial)
   - Body/UI: **Geist** (técnica, ultra-moderna)
 - **Paleta**: preto profundo (#0A0A0A), grafite, branco quebrado; **accent verde-elétrico** (#C7F284) para ações primárias

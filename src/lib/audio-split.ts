@@ -42,7 +42,9 @@ function getAudioDuration(file: File): Promise<number> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve(0);
     const url = URL.createObjectURL(file);
-    const media = file.type.startsWith("video/") ? document.createElement("video") : document.createElement("audio");
+    const media = file.type.startsWith("video/")
+      ? document.createElement("video")
+      : document.createElement("audio");
     media.src = url;
     media.preload = "metadata";
     media.onloadedmetadata = () => {
@@ -79,28 +81,39 @@ export async function splitMediaIntoAudioChunks(
   await ff.writeFile(inputName, await fetchFile(file));
 
   const duration = await getAudioDuration(file);
-  const effectiveDuration = maxSeconds && maxSeconds > 0 ? Math.min(duration, maxSeconds) : duration;
+  const effectiveDuration =
+    maxSeconds && maxSeconds > 0 ? Math.min(duration, maxSeconds) : duration;
   const estimatedSize = effectiveDuration * 8 * 1024; // 64kbps mono ≈ 8KB/s
-  const shouldSegment = estimatedSize > MAX_BYTES || (segmentSeconds < 120 && effectiveDuration > segmentSeconds);
+  const shouldSegment =
+    estimatedSize > MAX_BYTES || (segmentSeconds < 120 && effectiveDuration > segmentSeconds);
 
   let chunks: File[] = [];
 
   if (shouldSegment) {
-    onProgress?.({ phase: "decoding", message: "Fatiando áudio em partes (etapa única e otimizada)…" });
-    
+    onProgress?.({
+      phase: "decoding",
+      message: "Fatiando áudio em partes (etapa única e otimizada)…",
+    });
+
     const args = [];
     if (maxSeconds && maxSeconds > 0) {
       args.push("-t", String(maxSeconds));
     }
     args.push(
-      "-i", inputName,
+      "-i",
+      inputName,
       "-vn",
-      "-ac", "1",
-      "-ar", "16000",
-      "-b:a", "64k",
-      "-f", "segment",
-      "-segment_time", String(segmentSeconds),
-      "out_%03d.mp3"
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      "-b:a",
+      "64k",
+      "-f",
+      "segment",
+      "-segment_time",
+      String(segmentSeconds),
+      "out_%03d.mp3",
     );
 
     // Executamos o FFMpeg apenas UMA vez para todo o fatiamento, evitando OOM
@@ -135,14 +148,7 @@ export async function splitMediaIntoAudioChunks(
     if (maxSeconds && maxSeconds > 0) {
       args.push("-t", String(maxSeconds));
     }
-    args.push(
-      "-i", inputName,
-      "-vn",
-      "-ac", "1",
-      "-ar", "16000",
-      "-b:a", "64k",
-      outName
-    );
+    args.push("-i", inputName, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "64k", outName);
     await ff.exec(args);
 
     const data = (await ff.readFile(outName)) as Uint8Array;
