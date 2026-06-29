@@ -60,7 +60,9 @@ function getAudioDuration(file: File): Promise<number> {
 
 /**
  * Splits a media file into MP3 chunks safe to send to Whisper.
- * Files <= 24MB and already audio (mp3) are returned as-is (single chunk).
+ * MP3 files are returned as-is only when both their size and duration fit in
+ * one request. Long MP3 files must still be segmented because transcription
+ * models limit audio tokens independently of the byte size.
  */
 export async function splitMediaIntoAudioChunks(
   file: File,
@@ -68,8 +70,18 @@ export async function splitMediaIntoAudioChunks(
   segmentSeconds: number = SEGMENT_SECONDS,
   maxSeconds?: number,
 ): Promise<File[]> {
-  // Small mp3 → no work needed (only if no clipping is requested).
-  if (file.size <= MAX_BYTES && file.type.includes("mpeg") && (!maxSeconds || maxSeconds <= 0)) {
+  const duration = await getAudioDuration(file);
+  const effectiveDuration =
+    maxSeconds && maxSeconds > 0 ? Math.min(duration, maxSeconds) : duration;
+
+  // Small, short MP3 → no conversion needed when no clipping is requested.
+  if (
+    file.size <= MAX_BYTES &&
+    file.type.includes("mpeg") &&
+    effectiveDuration > 0 &&
+    effectiveDuration <= segmentSeconds &&
+    (!maxSeconds || maxSeconds <= 0)
+  ) {
     return [file];
   }
 
@@ -80,12 +92,9 @@ export async function splitMediaIntoAudioChunks(
   onProgress?.({ phase: "decoding", message: "Carregando arquivo de mídia…" });
   await ff.writeFile(inputName, await fetchFile(file));
 
-  const duration = await getAudioDuration(file);
-  const effectiveDuration =
-    maxSeconds && maxSeconds > 0 ? Math.min(duration, maxSeconds) : duration;
   const estimatedSize = effectiveDuration * 8 * 1024; // 64kbps mono ≈ 8KB/s
   const shouldSegment =
-    estimatedSize > MAX_BYTES || (segmentSeconds < 120 && effectiveDuration > segmentSeconds);
+    effectiveDuration <= 0 || estimatedSize > MAX_BYTES || effectiveDuration > segmentSeconds;
 
   let chunks: File[] = [];
 
@@ -126,7 +135,10 @@ export async function splitMediaIntoAudioChunks(
       console.warn("Failed to delete input file:", e);
     }
 
-    const numSegments = Math.ceil(effectiveDuration / segmentSeconds);
+    // If browser metadata was unavailable, keep reading sequential outputs
+    // until FFmpeg reports that the next segment does not exist.
+    const numSegments =
+      effectiveDuration > 0 ? Math.ceil(effectiveDuration / segmentSeconds) : 1000;
     for (let i = 0; i < numSegments + 5; i++) {
       const outName = `out_${String(i).padStart(3, "0")}.mp3`;
       try {

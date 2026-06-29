@@ -21,7 +21,7 @@ Dois modelos que você citou **não existem com esse nome exato** na API da Open
    - Tenta primeiro extrair legendas oficiais (rápido, grátis)
    - Se não houver legenda, baixa o áudio do vídeo no servidor e transcreve via Whisper (mesmo pipeline do upload, com split se necessário)
 4. **Vocabulário customizado** (Conscienciologia): textarea com termos, salvo em `localStorage`, enviado como `prompt` na chamada Whisper para guiar reconhecimento
-5. **Toggle "Polir transcrição"** (desligado por padrão): pós-processa com `gpt-5.4-mini` para corrigir pontuação, parágrafos e reforçar termos do vocabulário
+5. **Toggle "Corrigir transcrição"** (desligado por padrão): pós-processa com `gpt-5.4-mini` para corrigir pontuação, parágrafos e reforçar termos do vocabulário
 6. **Resultado**:
    - Copiar para clipboard
    - Baixar `.txt`
@@ -52,7 +52,7 @@ Vou implementar e testar; se YouTube bloquear consistentemente, documento isso n
 
 ## Telas
 
-- **`/`** — Hero centrado, tabs "Arquivo" / "YouTube", painel collapsible "Vocabulário customizado", toggle "Polir transcrição", botão grande "Transcrever". Resultado aparece abaixo com ações (copiar, .txt, .docx)
+- **`/`** — Hero centrado, tabs "Arquivo" / "YouTube", painel collapsible "Vocabulário customizado", toggle "Corrigir transcrição", botão grande "Transcrever". Resultado aparece abaixo com ações (copiar, .txt, .docx)
 - **`/historico`** — Lista de transcrições anteriores
 
 ## Design

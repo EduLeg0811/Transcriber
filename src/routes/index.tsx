@@ -279,7 +279,7 @@ function Index() {
     setViewMode("original");
     try {
       const totalDuration = await getMediaDuration(file);
-      const segmentSeconds = model.includes("gpt-4o") ? 60 : 300;
+      const segmentSeconds = 300;
       let maxSeconds: number | undefined;
       if (limitEnabled) {
         const mins = parseFloat(limitMinutes);
@@ -1205,7 +1205,7 @@ function Index() {
                       ) : (
                         <Wand2 className="h-3 w-3" />
                       )}
-                      Polir com IA
+                      Corrigir com IA
                     </button>
                     <button
                       onClick={runMergeParagraphs}
