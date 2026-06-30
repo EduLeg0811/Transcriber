@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: transcreve
+    runtime: node
+    plan: starter
+    region: oregon
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: node .output/server/index.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: 22.13.0
+      - key: NODE_ENV
+        value: production
+      - key: OPENAI_API_KEY
+        sync: false
