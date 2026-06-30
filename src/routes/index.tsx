@@ -684,7 +684,7 @@ function Index() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
+                transition={{ duration: 0, ease: "easeOut" }}
                 className="text-center mb-12 pt-10"
               >
                 <h1 className="font-display text-5xl leading-[1.05] text-foreground sm:text-6xl">
