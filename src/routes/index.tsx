@@ -701,7 +701,7 @@ function Index() {
                 </TabsList>
 
                 {/* Botões Transcrever / Revisor */}
-                <div className="flex items-center gap-1 bg-background/30 border border-border rounded-full p-0.5">
+                <div className="flex items-center gap-1 bg-white border border-border rounded-full p-0.5">
                   <button
                     type="button"
                     onClick={() => {
