@@ -143,7 +143,10 @@ function parseYoutubeIdClient(url: string): string | null {
   }
 }
 
+let heroShown = true;
+
 function Index() {
+  const [showHero, setShowHero] = useState(heroShown);
   const [tab, setTab] = useState<"file" | "youtube">("file");
   const [file, setFile] = useState<File | null>(null);
   const [ytUrl, setYtUrl] = useState("");
@@ -249,6 +252,12 @@ function Index() {
     if (f) setFile(f);
   }, []);
 
+  function dismissHero() {
+    if (!heroShown) return;
+    heroShown = false;
+    setShowHero(false);
+  }
+
   async function runLocalConverter() {
     if (!file) return;
 
@@ -278,6 +287,7 @@ function Index() {
       toast.error("Selecione um arquivo primeiro.");
       return;
     }
+    dismissHero();
     const started = performance.now();
     setResult(null);
     setHasPolished(false);
@@ -420,6 +430,7 @@ function Index() {
       toast.error("Cole o link do YouTube.");
       return;
     }
+    dismissHero();
     const started = performance.now();
     setResult(null);
     setHasPolished(false);
@@ -506,6 +517,7 @@ function Index() {
       toast.error("Selecione um arquivo de texto (.txt) para revisar.");
       return;
     }
+    dismissHero();
     const started = performance.now();
     setResult(null);
     setHasPolished(false);
@@ -541,6 +553,7 @@ function Index() {
       toast.error("Selecione um arquivo de texto (.txt) para revisar.");
       return;
     }
+    dismissHero();
     const started = performance.now();
     setResult(null);
     setHasPolished(false);
@@ -625,13 +638,21 @@ function Index() {
       {/* Nav */}
       <nav className="sticky top-0 z-30 border-b border-border/50 bg-card/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <Link to="/" title="Voltar à página inicial" className="group flex items-center gap-3">
-            <img
-              src="/favicon.svg"
-              alt="Logo"
-              className="h-12 w-12 transition-transform duration-300 group-hover:scale-110 group-hover:drop-shadow-[0_0_8px_color-mix(in_oklch,var(--primary)_40%,transparent)]"
-            />
-            <span className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <a
+              href="https://cons-ia-f8wf.onrender.com/gallery.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Cons-IA Gallery"
+              className="group shrink-0"
+            >
+              <img
+                src="/favicon.svg"
+                alt="Logo"
+                className="h-12 w-12 transition-transform duration-300 group-hover:scale-110 group-hover:drop-shadow-[0_0_8px_color-mix(in_oklch,var(--primary)_40%,transparent)]"
+              />
+            </a>
+            <Link to="/" title="Voltar à página inicial" className="group flex items-center gap-2">
               <span className="font-display text-3xl font-medium tracking-tight text-foreground truncate max-w-[14rem] sm:max-w-none">
                 Escriba<span className="italic text-primary"> IA</span>
               </span>
@@ -639,8 +660,8 @@ function Index() {
               <span className="hidden font-sans text-xs uppercase tracking-[0.22em] text-muted-foreground sm:inline">
                 Transcrição
               </span>
-            </span>
-          </Link>
+            </Link>
+          </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <Link
@@ -657,21 +678,26 @@ function Index() {
       {/* Hero */}
       <main className="mx-auto w-full max-w-6xl px-6 py-10">
         <div className="mx-auto w-full max-w-none">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="text-center mb-12 pt-10"
-          >
-            <h1 className="font-display text-5xl leading-[1.05] text-foreground sm:text-6xl">
-              Fala,
-              <br />
-              <span className="italic text-primary/80">que eu transcrevo.</span>
-            </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground">
-              Transcrição de Áudio • Legendas do YouTube • Revisão • Ajuste IA
-            </p>
-          </motion.div>
+          <AnimatePresence>
+            {showHero && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className="text-center mb-12 pt-10"
+              >
+                <h1 className="font-display text-5xl leading-[1.05] text-foreground sm:text-6xl">
+                  Fala,
+                  <br />
+                  <span className="italic text-primary/80">que eu transcrevo.</span>
+                </h1>
+                <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground">
+                  Transcrição de Áudio • Legendas do YouTube • Revisão • Ajuste IA
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Card */}
           <motion.section
@@ -1339,7 +1365,7 @@ function Index() {
         </AnimatePresence>
 
         {/* Footer note */}
-        <p className="mt-4 text-center text-xs text-muted-foreground">@2026 ● Cons-IA</p>
+        <p className="mt-4 text-center text-xs text-muted-foreground">TranScribe IA ● @2026</p>
       </main>
     </div>
   );
