@@ -623,31 +623,24 @@ function Index() {
       <Toaster theme="dark" position="top-center" richColors />
 
       {/* Nav */}
-      <header className="sticky top-0 z-30 bg-background/70 border-b border-border/50 backdrop-blur-xl py-4 mb-6">
-        <div className="mx-auto flex max-w-[65%] w-full items-center justify-between px-6 md:px-12">
-          <div className="flex items-center gap-2">
-            <a
-              href="https://www.cons-ia.org"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group"
-              title="Acessar Cons-IA"
-            >
-              <img
-                src="/favicon.svg"
-                alt="Cons-IA"
-                className="h-12 w-12 rounded-lg transition-all duration-300 group-hover:scale-110 group-hover:drop-shadow-[0_0_8px_rgba(34,197,94,0.4)]"
-              />
-            </a>
-            <Link to="/" className="flex items-center gap-2">
-              <span className="font-display text-2xl tracking-tight text-foreground">
-                Escriba <span className="text-primary font-bold">IA</span>
+      <nav className="sticky top-0 z-30 border-b border-border/50 bg-card/70 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+          <Link to="/" title="Voltar à página inicial" className="group flex items-center gap-3">
+            <img
+              src="/favicon.svg"
+              alt="Logo"
+              className="h-12 w-12 transition-transform duration-300 group-hover:scale-110 group-hover:drop-shadow-[0_0_8px_color-mix(in_oklch,var(--primary)_40%,transparent)]"
+            />
+            <span className="flex items-center gap-2">
+              <span className="font-display text-3xl font-medium tracking-tight text-foreground truncate max-w-[14rem] sm:max-w-none">
+                Escriba<span className="italic text-primary"> IA</span>
               </span>
-              <span className="hidden sm:inline text-[9px] uppercase tracking-[0.22em] text-muted-foreground ml-1.5 self-end mb-1">
+              <span className="hidden h-4 w-px bg-border sm:inline" />
+              <span className="hidden font-sans text-xs uppercase tracking-[0.22em] text-muted-foreground sm:inline">
                 Transcrição
               </span>
-            </Link>
-          </div>
+            </span>
+          </Link>
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <Link
@@ -659,23 +652,23 @@ function Index() {
             </Link>
           </div>
         </div>
-      </header>
+      </nav>
 
       {/* Hero */}
-      <main className="mx-auto w-full max-w-[65%] px-6 pb-4 pt-4 md:px-12">
+      <main className="mx-auto w-full max-w-6xl px-6 py-10">
         <div className="mx-auto w-full max-w-none">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
-            className="text-center mb-12"
+            className="text-center mb-12 pt-10"
           >
             <h1 className="font-display text-5xl leading-[1.05] text-foreground sm:text-6xl">
               Fala,
               <br />
               <span className="italic text-primary/80">que eu transcrevo.</span>
             </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-xs sm:text-sm md:text-base leading-relaxed text-muted-foreground font-sans">
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground">
               Transcrição de Áudio • Legendas do YouTube • Revisão • Ajuste IA
             </p>
           </motion.div>
@@ -718,7 +711,7 @@ function Index() {
                       }
                     }}
                     className={`rounded-full px-3 py-1 text-xs font-medium transition-all border ${!isReviewer
-                      ? "bg-primary/10 text-primary border-primary/25 shadow-sm"
+                      ? "bg-violet-100 text-violet-700 border-violet-200 shadow-sm dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-700/40"
                       : "text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40"
                       }`}
                   >
@@ -733,7 +726,7 @@ function Index() {
                       }
                     }}
                     className={`rounded-full px-3 py-1 text-xs font-medium transition-all border ${isReviewer
-                      ? "bg-primary/10 text-primary border-primary/25 shadow-sm"
+                      ? "bg-violet-100 text-violet-700 border-violet-200 shadow-sm dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-700/40"
                       : "text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40"
                       }`}
                   >
