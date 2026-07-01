@@ -36,6 +36,7 @@ async function getFFmpeg(onLog?: (m: string) => void): Promise<FFmpeg> {
 export type SplitProgress = (info: {
   phase: "loading" | "decoding" | "ready";
   message?: string;
+  percent?: number;
 }) => void;
 
 function getAudioDuration(file: File): Promise<number> {
@@ -47,11 +48,19 @@ function getAudioDuration(file: File): Promise<number> {
       : document.createElement("audio");
     media.src = url;
     media.preload = "metadata";
+
+    const timeoutId = setTimeout(() => {
+      URL.revokeObjectURL(url);
+      resolve(0);
+    }, 3000); // 3 seconds timeout fallback
+
     media.onloadedmetadata = () => {
+      clearTimeout(timeoutId);
       URL.revokeObjectURL(url);
       resolve(media.duration);
     };
     media.onerror = () => {
+      clearTimeout(timeoutId);
       URL.revokeObjectURL(url);
       resolve(0);
     };
@@ -85,11 +94,18 @@ export async function splitMediaIntoAudioChunks(
     return [file];
   }
 
-  onProgress?.({ phase: "loading", message: "Carregando processador de áudio…" });
+  onProgress?.({
+    phase: "loading",
+    message: "Carregando processador de áudio (baixando ~30MB via CDN)…",
+  });
   const ff = await getFFmpeg();
 
   const inputName = "input" + guessExt(file.name);
-  onProgress?.({ phase: "decoding", message: "Carregando arquivo de mídia…" });
+  const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+  onProgress?.({
+    phase: "decoding",
+    message: `Carregando arquivo de mídia (${sizeMB} MB) na memória virtual…`,
+  });
   await ff.writeFile(inputName, await fetchFile(file));
 
   const estimatedSize = effectiveDuration * 8 * 1024; // 64kbps mono ≈ 8KB/s
@@ -98,82 +114,112 @@ export async function splitMediaIntoAudioChunks(
 
   let chunks: File[] = [];
 
-  if (shouldSegment) {
+  const progressHandler = ({ progress }: { progress: number }) => {
+    let percent = Math.round(progress * 100);
+    if (isNaN(percent) || percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+
+    const actionText = shouldSegment
+      ? "Fatiando áudio em partes"
+      : "Convertendo áudio";
     onProgress?.({
       phase: "decoding",
-      message: "Fatiando áudio em partes (etapa única e otimizada)…",
+      message: `${actionText}: ${percent}% concluído…`,
+      percent,
     });
+  };
 
-    const args = [];
-    if (maxSeconds && maxSeconds > 0) {
-      args.push("-t", String(maxSeconds));
-    }
-    args.push(
-      "-i",
-      inputName,
-      "-vn",
-      "-ac",
-      "1",
-      "-ar",
-      "16000",
-      "-b:a",
-      "64k",
-      "-f",
-      "segment",
-      "-segment_time",
-      String(segmentSeconds),
-      "out_%03d.mp3",
-    );
+  ff.on("progress", progressHandler);
 
-    // Executamos o FFMpeg apenas UMA vez para todo o fatiamento, evitando OOM
-    await ff.exec(args);
+  try {
+    if (shouldSegment) {
+      onProgress?.({
+        phase: "decoding",
+        message: "Fatiando áudio em partes: 0% concluído…",
+        percent: 0,
+      });
 
-    // Removemos o arquivo original gigante imediatamente para liberar RAM
-    try {
-      await ff.deleteFile(inputName);
-    } catch (e) {
-      console.warn("Failed to delete input file:", e);
-    }
-
-    // If browser metadata was unavailable, keep reading sequential outputs
-    // until FFmpeg reports that the next segment does not exist.
-    const numSegments =
-      effectiveDuration > 0 ? Math.ceil(effectiveDuration / segmentSeconds) : 1000;
-    for (let i = 0; i < numSegments + 5; i++) {
-      const outName = `out_${String(i).padStart(3, "0")}.mp3`;
-      try {
-        const data = (await ff.readFile(outName)) as Uint8Array;
-        if (data && data.length > 8192) {
-          const buf = new Uint8Array(data);
-          chunks.push(new File([buf], outName, { type: "audio/mpeg" }));
-          await ff.deleteFile(outName);
-        } else if (data) {
-          console.log(`[FFmpeg] Descartando chunk insignificante/corrompido: ${outName} (${data.length} bytes)`);
-          await ff.deleteFile(outName);
-        }
-      } catch (err) {
-        // Interrompe quando não houver mais arquivos subsequentes
-        break;
+      const args = [];
+      if (maxSeconds && maxSeconds > 0) {
+        args.push("-t", String(maxSeconds));
       }
-    }
-  } else {
-    onProgress?.({ phase: "decoding", message: "Convertendo áudio…" });
-    const outName = "out_000.mp3";
-    const args = [];
-    if (maxSeconds && maxSeconds > 0) {
-      args.push("-t", String(maxSeconds));
-    }
-    args.push("-i", inputName, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "64k", outName);
-    await ff.exec(args);
+      args.push(
+        "-i",
+        inputName,
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-b:a",
+        "64k",
+        "-f",
+        "segment",
+        "-segment_time",
+        String(segmentSeconds),
+        "out_%03d.mp3",
+      );
 
-    const data = (await ff.readFile(outName)) as Uint8Array;
-    const buf = new Uint8Array(data);
-    const finalName = file.name.replace(/\.[^/.]+$/, "") + ".mp3";
-    chunks.push(new File([buf], finalName, { type: "audio/mpeg" }));
+      // Executamos o FFMpeg apenas UMA vez para todo o fatiamento, evitando OOM
+      await ff.exec(args);
+
+      // Removemos o arquivo original gigante imediatamente para liberar RAM
+      try {
+        await ff.deleteFile(inputName);
+      } catch (e) {
+        console.warn("Failed to delete input file:", e);
+      }
+
+      // If browser metadata was unavailable, keep reading sequential outputs
+      // until FFmpeg reports that the next segment does not exist.
+      const numSegments =
+        effectiveDuration > 0 ? Math.ceil(effectiveDuration / segmentSeconds) : 1000;
+      for (let i = 0; i < numSegments + 5; i++) {
+        const outName = `out_${String(i).padStart(3, "0")}.mp3`;
+        try {
+          const data = (await ff.readFile(outName)) as Uint8Array;
+          if (data && data.length > 8192) {
+            const buf = new Uint8Array(data);
+            chunks.push(new File([buf], outName, { type: "audio/mpeg" }));
+            await ff.deleteFile(outName);
+          } else if (data) {
+            console.log(`[FFmpeg] Descartando chunk insignificante/corrompido: ${outName} (${data.length} bytes)`);
+            await ff.deleteFile(outName);
+          }
+        } catch (err) {
+          // Interrompe quando não houver mais arquivos subsequentes
+          break;
+        }
+      }
+    } else {
+      onProgress?.({
+        phase: "decoding",
+        message: "Convertendo áudio: 0% concluído…",
+        percent: 0,
+      });
+      const outName = "out_000.mp3";
+      const args = [];
+      if (maxSeconds && maxSeconds > 0) {
+        args.push("-t", String(maxSeconds));
+      }
+      args.push("-i", inputName, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "64k", outName);
+      await ff.exec(args);
+
+      const data = (await ff.readFile(outName)) as Uint8Array;
+      const buf = new Uint8Array(data);
+      const finalName = file.name.replace(/\.[^/.]+$/, "") + ".mp3";
+      chunks.push(new File([buf], finalName, { type: "audio/mpeg" }));
+      try {
+        await ff.deleteFile(outName);
+        await ff.deleteFile(inputName);
+      } catch {}
+    }
+  } finally {
     try {
-      await ff.deleteFile(outName);
-      await ff.deleteFile(inputName);
-    } catch {}
+      ff.off("progress", progressHandler);
+    } catch (e) {
+      console.warn("Failed to remove FFmpeg progress handler:", e);
+    }
   }
 
   onProgress?.({ phase: "ready", message: `${chunks.length} pedaço(s) pronto(s).` });

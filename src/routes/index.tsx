@@ -73,8 +73,8 @@ export const Route = createFileRoute("/")({
 
 type Phase =
   | { kind: "idle" }
-  | { kind: "splitting"; message: string }
-  | { kind: "transcribing"; current: number; total: number }
+  | { kind: "splitting"; message: string; percent?: number }
+  | { kind: "transcribing"; current: number; total: number; detailMessage?: string; etaSeconds?: number }
   | { kind: "polishing" }
   | { kind: "fetching-captions" }
   | { kind: "done" }
@@ -115,11 +115,19 @@ function getMediaDuration(file: File): Promise<number> {
       : document.createElement("audio");
     media.src = url;
     media.preload = "metadata";
+
+    const timeoutId = setTimeout(() => {
+      URL.revokeObjectURL(url);
+      resolve(0);
+    }, 3000); // 3 seconds timeout fallback
+
     media.onloadedmetadata = () => {
+      clearTimeout(timeoutId);
       URL.revokeObjectURL(url);
       resolve(media.duration);
     };
     media.onerror = () => {
+      clearTimeout(timeoutId);
       URL.revokeObjectURL(url);
       resolve(0);
     };
@@ -320,11 +328,11 @@ function Index() {
         cachedChunks = new Map();
         transcriptionCacheRef.current.set(cacheKey, cachedChunks);
       }
-      setPhase({ kind: "splitting", message: "Preparando áudio…" });
+      setPhase({ kind: "splitting", message: "Preparando áudio…", percent: 0 });
       const chunks = await splitMediaIntoAudioChunks(
         file,
-        ({ message }) => {
-          if (message) setPhase({ kind: "splitting", message });
+        ({ message, percent }) => {
+          if (message) setPhase({ kind: "splitting", message, percent });
         },
         segmentSeconds,
         maxSeconds,
@@ -333,21 +341,67 @@ function Index() {
       const texts: string[] = [];
       const allSegments: Array<{ start: number; end: number; text: string }> = [];
       let accumulatedOffset = 0;
+      const transcriptionStart = performance.now();
+
       for (let i = 0; i < chunks.length; i++) {
+        const chunkIndex = i + 1;
+        setPhase({
+          kind: "transcribing",
+          current: chunkIndex,
+          total: chunks.length,
+          detailMessage: `Analisando metadados do trecho ${chunkIndex}/${chunks.length}…`,
+        });
         const currentChunkDuration = await getMediaDuration(chunks[i]);
         if (currentChunkDuration < 1.0 && chunks.length > 1) {
           accumulatedOffset += currentChunkDuration;
           continue;
         }
 
-        setPhase({ kind: "transcribing", current: i + 1, total: chunks.length });
+        const chunkSizeMB = (chunks[i].size / (1024 * 1024)).toFixed(2);
+
+        // Calculate ETA
+        let etaSeconds: number | undefined;
+        if (completedChunkCount > 0) {
+          const elapsedMs = performance.now() - transcriptionStart;
+          const avgMsPerChunk = elapsedMs / completedChunkCount;
+          const remainingChunks = chunks.length - completedChunkCount;
+          etaSeconds = Math.round((avgMsPerChunk * remainingChunks) / 1000);
+        }
+
         let chunkResult = cachedChunks.get(i);
-        if (!chunkResult) {
+        if (chunkResult) {
+          setPhase({
+            kind: "transcribing",
+            current: chunkIndex,
+            total: chunks.length,
+            detailMessage: `Trecho ${chunkIndex}/${chunks.length} recuperado do cache instantaneamente.`,
+            etaSeconds,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        } else {
+          setPhase({
+            kind: "transcribing",
+            current: chunkIndex,
+            total: chunks.length,
+            detailMessage: `Enviando trecho ${chunkIndex}/${chunks.length} (${chunkSizeMB} MB) para a API de IA…`,
+            etaSeconds,
+          });
+
           const fd = new FormData();
           fd.append("file", chunks[i]);
           fd.append("vocabulary", vocab);
           fd.append("model", model);
-          chunkResult = await transcribeChunk({ data: fd });
+
+          const promise = transcribeChunk({ data: fd });
+          setPhase({
+            kind: "transcribing",
+            current: chunkIndex,
+            total: chunks.length,
+            detailMessage: `Processando trecho ${chunkIndex}/${chunks.length} na IA (aguardando resposta)…`,
+            etaSeconds,
+          });
+
+          chunkResult = await promise;
           cachedChunks.set(i, chunkResult);
         }
         completedChunkCount++;
@@ -390,8 +444,12 @@ function Index() {
         accumulatedOffset += currentChunkDuration;
       }
       let full = texts.join("\n\n").trim();
-
       const durationMs = Math.round(performance.now() - started);
+
+      setPhase({
+        kind: "splitting",
+        message: "Consolidando textos finais e organizando parágrafos…",
+      });
       setResult({
         text: full,
         originalText: full,
@@ -399,6 +457,10 @@ function Index() {
         kind: "file",
         durationMs,
         initialSegments: allSegments,
+      });
+      setPhase({
+        kind: "splitting",
+        message: "Gravando transcrição no histórico local…",
       });
       saveHistoryItem({
         id: crypto.randomUUID(),
@@ -1373,13 +1435,21 @@ function Index() {
 
 function PhaseLine({ phase }: { phase: Phase }) {
   let label = "";
+  let detail = "";
   let value: number | null = null;
   switch (phase.kind) {
     case "splitting":
       label = phase.message ?? "Preparando…";
+      if (phase.percent !== undefined) {
+        value = phase.percent;
+      }
       break;
     case "transcribing":
       label = `Transcrevendo ${phase.current}/${phase.total}…`;
+      detail = phase.detailMessage ?? "";
+      if (phase.etaSeconds !== undefined && phase.etaSeconds > 0) {
+        detail += ` (Tempo estimado restante: ~${phase.etaSeconds}s)`;
+      }
       value = ((phase.current - 1) / phase.total) * 100;
       break;
     case "polishing":
@@ -1399,8 +1469,11 @@ function PhaseLine({ phase }: { phase: Phase }) {
       {phase.kind !== "error" && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
       {phase.kind === "error" && <X className="h-3.5 w-3.5 text-destructive" />}
       <div className="flex-1">
-        <div className={phase.kind === "error" ? "text-destructive" : ""}>{label}</div>
-        {value !== null && <Progress value={value} className="mt-2 h-1" />}
+        <div className={phase.kind === "error" ? "text-destructive" : "font-medium text-foreground"}>
+          {label}
+        </div>
+        {detail && <div className="text-xs text-muted-foreground mt-1">{detail}</div>}
+        {value !== null && <Progress value={value} className="mt-2.5 h-1" />}
       </div>
     </div>
   );
